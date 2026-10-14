@@ -154,6 +154,12 @@ function toggleCatalog(it){
   else if (it.state === "next") { setItem(it.id, { state: "list", added_at: Date.now() }); toast(`${it.name} voltou para esta compra`); }
   else toast(`${it.name} já está no carrinho`);
 }
+function removeFromList(id){
+  const it = S.items.get(id); if (!it) return;
+  const prev = it.state;
+  setItem(id, { state: "catalog" });
+  toast(`${it.name} saiu da lista`, "Desfazer", () => setItem(id, { state: prev }));
+}
 function deleteItem(id){
   const it = S.items.get(id); if (!it) return;
   const { id: _, ...row } = it;
@@ -223,7 +229,7 @@ function render(){
 
 function rowHTML(it, mode){
   const em = `<span class="em" aria-hidden="true">${emojiOf(it)}</span>`;
-  if (mode === "list") return `<li class="row" data-id="${it.id}" data-swipe="next"><div class="row-bg">Não tinha</div><div class="row-fg">
+  if (mode === "list") return `<li class="row" data-id="${it.id}" data-swipe="remove"><div class="row-bg rm">Remover</div><div class="row-fg">
     <button class="chk" data-act="cart" aria-label="Pegar ${esc(it.name)}">${I_CHECK}</button>
     <div class="line">${em}<button class="name" data-act="sheet">${esc(it.name)}</button><button class="miss" data-act="next">Não tinha</button></div></div></li>`;
   if (mode === "cart") return `<li class="row done" data-id="${it.id}"><div class="row-fg">
@@ -259,7 +265,7 @@ function viewLista(list, cart, next){
   if (!list.length && !cart.length) h += `<div class="empty"><strong>Nada na lista</strong>Digite acima ou marque itens no Catálogo.</div>`;
   else if (!list.length) h += `<div class="empty"><strong>Tudo no carrinho</strong>Toque em Finalizar compra ao sair do mercado.</div>`;
   else h += grouped(list, "list");
-  if (list.length && !LS.get("lista.hintSeen", false)) h += `<p class="hint">Toque no círculo quando pegar o item. Se o mercado não tinha, toque em “Não tinha” ou arraste o item para a esquerda.</p>`;
+  if (list.length && !LS.get("lista.hintSeen", false)) h += `<p class="hint">Toque no círculo quando pegar o item. Se o mercado não tinha, toque em “Não tinha”. Para tirar um item da lista, arraste para a esquerda.</p>`;
   if (next.length) h += groupBlock("x:next", "Próxima vez", next.length, `<ul class="rows">${next.map(i => rowHTML(i, "next")).join("")}</ul><p class="hint">Não tinha no mercado. Volta para a lista quando você finalizar a compra.</p>`, "blue");
   if (cart.length){
     const open = S.openCart;
@@ -374,7 +380,7 @@ $("#finish").addEventListener("click", openFinish);
     if (!s.on) return;
     swiped = true; setTimeout(() => swiped = false, 350);
     s.fg.classList.remove("drag");
-    if (s.dx < -90){ s.fg.style.transform = "translateX(-110%)"; setTimeout(() => s.act === "del" ? deleteItem(s.id) : markNext(s.id), 170); }
+    if (s.dx < -90){ s.fg.style.transform = "translateX(-110%)"; setTimeout(() => s.act === "del" ? deleteItem(s.id) : removeFromList(s.id), 170); }
     else s.fg.style.transform = "";
   };
   body.addEventListener("pointerup", end); body.addEventListener("pointercancel", end);
@@ -603,7 +609,7 @@ function toast(msg, label, fn){
 
 /* ---------- new version banner ---------- */
 // Bump APP_VERSION here and in version.json on every release.
-const APP_VERSION = "2026-10-14.3";
+const APP_VERSION = "2026-10-14.4";
 let updateShown = false;
 async function checkVersion(){
   if (updateShown || document.hidden || location.protocol === "file:") return;

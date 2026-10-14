@@ -1,5 +1,5 @@
 // Keeps the app shell and libraries on the phone so Lista opens without internet.
-const CACHE = "lista-v3";
+const CACHE = "lista-v4";
 const SHELL = ["./", "index.html", "app.js", "cats.js", "config.js", "manifest.webmanifest", "icons/icon-192.png", "icons/apple-touch-icon.png",
   "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js",
   "https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js",
