@@ -34,7 +34,11 @@ button{cursor:pointer;background:none;border:0;padding:0}
 .app{max-width:680px;margin:0 auto;min-height:100%;padding-top:env(safe-area-inset-top,0px);padding-left:max(20px,env(safe-area-inset-left,0px));padding-right:max(20px,env(safe-area-inset-right,0px));padding-bottom:calc(150px + env(safe-area-inset-bottom,0px))}
 header{padding-block:18px 8px;display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
 h1{font-family:var(--display);font-size:34px;font-weight:700;letter-spacing:-.02em;color:var(--accent);margin:0;line-height:1.1}
-.sync{font-size:13px;color:var(--muted);padding-bottom:6px;text-align:right}
+.hright{display:flex;align-items:center;gap:10px;padding-bottom:2px}
+.bell{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;color:var(--accent);background:var(--fill)}
+.bell svg{width:20px;height:20px}
+.bell.on{background:var(--accent);color:#FFFFFF}
+.sync{font-size:13px;color:var(--muted);text-align:right}
 .sync.warn{color:var(--blue)}
 
 .search{position:relative;margin:6px 0 10px}
@@ -170,7 +174,7 @@ nav.tabs button[aria-selected="true"]{color:var(--accent)}
 </head>
 <body>
 <div class="app">
-  <header><h1 id="title">Lista</h1><div class="sync" id="sync"></div></header>
+  <header><h1 id="title">Lista</h1><div class="hright"><div class="sync" id="sync"></div><button class="bell" id="bell" aria-label="Notificações"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9a6 6 0 0 1 12 0c0 4.5 1.6 6.4 2.5 7.2a.5.5 0 0 1-.3.8H3.8a.5.5 0 0 1-.3-.8C4.4 15.4 6 13.5 6 9z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/></svg></button></div></header>
   <div id="fieldHost"></div>
   <main id="body"></main>
 </div>

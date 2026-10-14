@@ -39,3 +39,15 @@ Open the Vercel link in **Safari** → Share button → **Add to Home Screen**. 
 - The link is the key. Anyone who has it can edit the list, so share it only between the two of you.
 - The anon key in `config.js` is meant to be public; it only allows access to these two tables.
 - To change the app later, edit the files and deploy again; both phones pick up the new version the next time they open it.
+
+## Notifications (when the other person adds items)
+
+One-time setup:
+
+1. **Supabase → SQL Editor:** run `supabase/4-notifications.sql`.
+2. **Vercel → your project → Settings → Environment Variables:** add `VAPID_PRIVATE_KEY` with the private key (kept only there, never in the code). Then **Deployments → ⋯ on the latest → Redeploy**.
+3. **On each iPhone:** open Lista from the home-screen icon (not from Safari), tap the bell at the top right, type your name, tap **Ativar notificações** and allow.
+
+Adds are grouped: the other phone gets one notification a few seconds after you stop adding, or as soon as you leave the app. You never get notified about your own adds.
+
+If the private key is ever lost, generate a new key pair, put the public one in `config.js` and `api/notify.js`, the private one in Vercel, and turn notifications on again on each phone.

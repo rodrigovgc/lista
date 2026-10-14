@@ -1,5 +1,5 @@
 // Keeps the app shell and libraries on the phone so Lista opens without internet.
-const CACHE = "lista-v6";
+const CACHE = "lista-v7";
 const SHELL = ["./", "index.html", "app.js", "cats.js", "config.js", "manifest.webmanifest", "icons/icon-192.png", "icons/apple-touch-icon.png",
   "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js",
   "https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js",
@@ -17,4 +17,18 @@ self.addEventListener("fetch", e => {
   } else {
     e.respondWith(caches.match(e.request).then(r => r || fetch(e.request).then(res => { const copy = res.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); return res; })));
   }
+});
+
+// Notifications sent by api/notify.js
+self.addEventListener("push", e => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (_) { d = { body: e.data ? e.data.text() : "" }; }
+  e.waitUntil(self.registration.showNotification(d.title || "Lista", { body: d.body || "", icon: "icons/icon-192.png", badge: "icons/icon-192.png", data: { url: "./" } }));
+});
+self.addEventListener("notificationclick", e => {
+  e.notification.close();
+  e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(cs => {
+    for (const c of cs) if ("focus" in c) return c.focus();
+    return self.clients.openWindow("./");
+  }));
 });

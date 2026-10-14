@@ -143,6 +143,7 @@ function createItem(name){
   const id = newId("i");
   const row = { name, cat: guessCat(name), state: "list", count: 0, last_at: 0, added_at: Date.now(), cart_at: 0 };
   queueWrite("items", id, row, true);
+  noteAdded(id);
   toast(`Na lista, em ${row.cat}`, "Mudar", () => openItemSheet(id));
 }
 function addExisting(it){
@@ -151,11 +152,12 @@ function addExisting(it){
   if (it.state === "cart") { toast(`${it.name} já está no carrinho`); return; }
   const wasNext = it.state === "next";
   setItem(it.id, { state: "list", added_at: Date.now() });
+  if (!wasNext) noteAdded(it.id);
   if (wasNext) toast(`${it.name} voltou para esta compra`);
 }
 function toggleCatalog(it){
   if (!it) return;
-  if (it.state === "catalog") setItem(it.id, { state: "list", added_at: Date.now() });
+  if (it.state === "catalog") { setItem(it.id, { state: "list", added_at: Date.now() }); noteAdded(it.id); }
   else if (it.state === "list") setItem(it.id, { state: "catalog" });
   else if (it.state === "next") { setItem(it.id, { state: "list", added_at: Date.now() }); toast(`${it.name} voltou para esta compra`); }
   else toast(`${it.name} já está no carrinho`);
@@ -231,6 +233,7 @@ function render(){
     fin.innerHTML = `Finalizar compra <small>${cart.length} ${cart.length === 1 ? "item" : "itens"}</small>`;
   } else fin.hidden = true;
   setSync();
+  $("#bell").classList.toggle("on", !!LS.get("lista.pushOn", false));
 }
 
 function rowHTML(it, mode){
@@ -633,9 +636,107 @@ function toast(msg, label, fn){
   document.body.appendChild(t); toastT = setTimeout(() => t.remove(), label ? 5000 : 2600);
 }
 
+/* ---------- notifications ---------- */
+// Each phone gets a random id. When you add items, the other phones are told
+// once you pause for a few seconds (or leave the app), in one notification.
+const DEVICE = (() => { let d = LS.get("lista.device", null); if (!d) { d = newId("d"); LS.set("lista.device", d); } return d; })();
+const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+const isStandalone = () => window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+const pushSupported = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+let pendingAdds = LS.get("lista.pendingAdds", []), addTimer = null;
+
+function noteAdded(id){
+  if (!pendingAdds.includes(id)) pendingAdds.push(id);
+  LS.set("lista.pendingAdds", pendingAdds);
+  clearTimeout(addTimer); addTimer = setTimeout(sendAdds, 12000);
+}
+function sendAdds(){
+  clearTimeout(addTimer); addTimer = null;
+  if (!pendingAdds.length || !navigator.onLine || location.protocol === "file:") return;
+  // Only items that are still on the list (an add that was undone is not news).
+  const names = pendingAdds.map(id => S.items.get(id)).filter(i => i && i.state === "list").map(i => i.name);
+  pendingAdds = []; LS.set("lista.pendingAdds", pendingAdds);
+  if (!names.length) return;
+  fetch("api/notify", { method: "POST", keepalive: true, headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ device: DEVICE, by: LS.get("lista.name", ""), names }) }).catch(() => {});
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") sendAdds(); });
+window.addEventListener("pagehide", sendAdds);
+window.addEventListener("online", () => { if (pendingAdds.length) sendAdds(); });
+
+function keyBytes(b64){ const p = "=".repeat((4 - b64.length % 4) % 4); const raw = atob((b64 + p).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from(raw, c => c.charCodeAt(0)); }
+async function currentSub(){ try { const reg = await navigator.serviceWorker.getRegistration(); return reg ? await reg.pushManager.getSubscription() : null; } catch(e){ return null; } }
+async function enablePush(){
+  const perm = await Notification.requestPermission();
+  if (perm !== "granted") throw new Error(perm === "denied" ? "denied" : "dismissed");
+  const reg = await navigator.serviceWorker.ready;
+  let sub = await reg.pushManager.getSubscription();
+  if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(CONFIG.vapidPublicKey) });
+  const json = sub.toJSON();
+  const r = await sb.from("push_subs").upsert({ endpoint: json.endpoint, device: DEVICE, name: LS.get("lista.name", ""), sub: json });
+  if (r.error) throw new Error("db:" + (r.error.message || ""));
+  LS.set("lista.pushOn", true);
+  await sendTest();
+}
+async function disablePush(){
+  const sub = await currentSub();
+  if (sub){ try { await sb.from("push_subs").delete().eq("endpoint", sub.endpoint); } catch(e){} try { await sub.unsubscribe(); } catch(e){} }
+  LS.set("lista.pushOn", false);
+}
+async function sendTest(){
+  const r = await fetch("api/notify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ device: DEVICE, test: true }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error("server:" + (j.error || r.status));
+  return j;
+}
+async function openNotifySheet(){
+  const name = LS.get("lista.name", "");
+  const sub = pushSupported() ? await currentSub() : null;
+  const on = !!sub && Notification.permission === "granted";
+  let status;
+  if (!pushSupported() || (isIOS && !isStandalone())) status = isIOS
+    ? "No iPhone, as notificações só funcionam com a Lista aberta pelo ícone na tela de início. No Safari: Compartilhar → Adicionar à Tela de Início, e abra por lá."
+    : "Este navegador não recebe notificações.";
+  else if (Notification.permission === "denied") status = "As notificações estão bloqueadas. Ative em Ajustes → Notificações → Lista.";
+  const canAct = !status;
+  openSheet(`<h3>Notificações</h3>
+    <p class="foot-note" style="margin:0 4px;font-size:15px;color:var(--ink2)">Receba um aviso quando alguém botar algo na lista. Você não recebe aviso dos itens que você mesmo botar.</p>
+    <div class="group"><label><span class="k">Seu nome</span><input type="text" id="nName" placeholder="Rodrigo" value="${esc(name)}" autocomplete="off"></label></div>
+    <p class="foot-note">Aparece nos avisos do outro celular: “${esc(name || "Seu nome")} botou Pão na lista”.</p>
+    ${status ? `<p class="foot-note warn" style="font-size:15px">${esc(status)}</p>` : ""}
+    <p class="foot-note" id="nStatus">${on ? "Ativadas neste celular." : ""}</p>
+    ${canAct ? (on
+      ? `<div class="group"><button id="nTest">Enviar aviso de teste</button><button class="red" id="nOff">Desativar neste celular</button></div>`
+      : `<button class="btn primary" id="nOn">Ativar notificações</button>`) : ""}
+    <button class="btn gray" data-close>Fechar</button>`, el => {
+    const setStatus = (t, cls = "") => { const p = $("#nStatus", el); p.textContent = t; p.className = "foot-note " + cls; };
+    $("#nName", el).addEventListener("input", e => LS.set("lista.name", e.target.value.trim().slice(0, 30)));
+    const explain = e => {
+      const m = String(e && e.message || e);
+      if (m === "denied") return "Você recusou as notificações. Para ativar: Ajustes → Notificações → Lista.";
+      if (m === "dismissed") return "Toque em Permitir quando o iPhone perguntar.";
+      if (m.startsWith("db:")) return "Não deu para salvar no Supabase. Falta rodar o arquivo 4-notifications.sql?";
+      if (m.includes("VAPID")) return "Falta configurar a chave VAPID_PRIVATE_KEY no Vercel.";
+      return "Não deu para ativar agora. Confira a internet e tente de novo.";
+    };
+    $("#nOn", el)?.addEventListener("click", async e => {
+      const b = e.currentTarget; b.disabled = true; b.textContent = "Ativando…";
+      try { await enablePush(); render(); closeSheet(); toast("Notificações ativadas"); }
+      catch(err){ b.disabled = false; b.textContent = "Ativar notificações"; setStatus(explain(err), "warn"); }
+    });
+    $("#nTest", el)?.addEventListener("click", async () => {
+      setStatus("Enviando…");
+      try { const j = await sendTest(); setStatus(j.sent ? "Aviso enviado. Ele chega em alguns segundos." : "Este celular não está registrado. Desative e ative de novo.", j.sent ? "ok" : "warn"); }
+      catch(err){ setStatus(explain(err), "warn"); }
+    });
+    $("#nOff", el)?.addEventListener("click", async () => { await disablePush(); render(); closeSheet(); toast("Notificações desativadas"); });
+  });
+}
+$("#bell").addEventListener("click", openNotifySheet);
+
 /* ---------- new version banner ---------- */
 // Bump APP_VERSION here and in version.json on every release.
-const APP_VERSION = "2026-10-14.6";
+const APP_VERSION = "2026-10-14.7";
 let updateShown = false;
 async function checkVersion(){
   if (updateShown || document.hidden || location.protocol === "file:") return;

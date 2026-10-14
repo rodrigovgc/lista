@@ -1,0 +1,8 @@
+{
+  "name": "lista",
+  "private": true,
+  "description": "Shared grocery list. Static site plus one Vercel function (api/notify.js).",
+  "dependencies": {
+    "web-push": "3.6.7"
+  }
+}
