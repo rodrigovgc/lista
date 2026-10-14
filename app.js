@@ -154,6 +154,12 @@ function toggleCatalog(it){
   else if (it.state === "next") { setItem(it.id, { state: "list", added_at: Date.now() }); toast(`${it.name} voltou para esta compra`); }
   else toast(`${it.name} já está no carrinho`);
 }
+function deleteItem(id){
+  const it = S.items.get(id); if (!it) return;
+  const { id: _, ...row } = it;
+  queueDelete("items", id);
+  toast(`${it.name} apagado do catálogo`, "Desfazer", () => queueWrite("items", id, row, true));
+}
 function markNext(id){
   const it = S.items.get(id); if (!it) return;
   setItem(id, { state: "next" });
@@ -217,7 +223,7 @@ function render(){
 
 function rowHTML(it, mode){
   const em = `<span class="em" aria-hidden="true">${emojiOf(it)}</span>`;
-  if (mode === "list") return `<li class="row" data-id="${it.id}"><div class="row-bg">Não tinha</div><div class="row-fg">
+  if (mode === "list") return `<li class="row" data-id="${it.id}" data-swipe="next"><div class="row-bg">Não tinha</div><div class="row-fg">
     <button class="chk" data-act="cart" aria-label="Pegar ${esc(it.name)}">${I_CHECK}</button>
     <div class="line">${em}<button class="name" data-act="sheet">${esc(it.name)}</button><button class="miss" data-act="next">Não tinha</button></div></div></li>`;
   if (mode === "cart") return `<li class="row done" data-id="${it.id}"><div class="row-fg">
@@ -227,7 +233,7 @@ function rowHTML(it, mode){
     <span class="chk next" aria-hidden="true"></span>
     <div class="line">${em}<button class="name" data-act="sheet">${esc(it.name)}</button><button class="miss" data-act="back">Achei</button></div></div></li>`;
   const on = onList(it);
-  return `<li class="row" data-id="${it.id}"><div class="row-fg">
+  return `<li class="row" data-id="${it.id}" data-swipe="del"><div class="row-bg del">Apagar</div><div class="row-fg">
     <button class="chk ${on && it.state !== "next" ? "on" : ""} ${it.state === "next" ? "next" : ""}" data-act="toggle" aria-pressed="${on}" aria-label="${on ? "Tirar da lista" : "Botar na lista"}: ${esc(it.name)}">${I_CHECK}</button>
     <div class="line">${em}<button class="name" data-act="sheet">${esc(it.name)}</button>${it.state === "next" || it.state === "cart" ? stateTag(it) : ""}</div></div></li>`;
 }
@@ -351,7 +357,7 @@ $("#finish").addEventListener("click", openFinish);
   body.addEventListener("pointerdown", e => {
     const fg = e.target.closest(".row-fg"), row = fg && fg.closest(".row");
     if (!fg || !row.querySelector(".row-bg")) return;
-    st = { fg, id: row.dataset.id, x: e.clientX, y: e.clientY, dx: 0, on: false, pid: e.pointerId };
+    st = { fg, id: row.dataset.id, act: row.dataset.swipe, x: e.clientX, y: e.clientY, dx: 0, on: false, pid: e.pointerId };
   });
   body.addEventListener("pointermove", e => {
     if (!st || e.pointerId !== st.pid) return;
@@ -368,7 +374,7 @@ $("#finish").addEventListener("click", openFinish);
     if (!s.on) return;
     swiped = true; setTimeout(() => swiped = false, 350);
     s.fg.classList.remove("drag");
-    if (s.dx < -90){ s.fg.style.transform = "translateX(-110%)"; setTimeout(() => markNext(s.id), 170); }
+    if (s.dx < -90){ s.fg.style.transform = "translateX(-110%)"; setTimeout(() => s.act === "del" ? deleteItem(s.id) : markNext(s.id), 170); }
     else s.fg.style.transform = "";
   };
   body.addEventListener("pointerup", end); body.addEventListener("pointercancel", end);
@@ -410,7 +416,7 @@ function openItemSheet(id){
       } else if (a === "del"){
         const b = $("#delBtn", el);
         if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = "Toque de novo para apagar de vez"; return; }
-        closeSheet(); queueDelete("items", id);
+        closeSheet(); deleteItem(id);
       } else {
         closeSheet();
         if (a === "next") markNext(id); else setItem(id, { state: a, ...(a === "list" ? { added_at: Date.now() } : {}) });
