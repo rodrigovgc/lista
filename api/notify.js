@@ -13,9 +13,9 @@ const clip = (s, n) => String(s || "").replace(/\s+/g, " ").trim().slice(0, n);
 
 function message(by, names){
   const who = by || "Alguém";
-  if (names.length === 1) return who + " botou " + names[0] + " na lista";
+  if (names.length === 1) return who + " adicionou " + names[0] + " na lista";
   const shown = names.slice(0, 6).join(", ");
-  return who + " botou na lista: " + shown + (names.length > 6 ? " e mais " + (names.length - 6) : "");
+  return who + " adicionou na lista: " + shown + (names.length > 6 ? " e mais " + (names.length - 6) : "");
 }
 
 module.exports = async (req, res) => {
@@ -38,7 +38,7 @@ module.exports = async (req, res) => {
   const subs = (await r.json()).filter(s => test ? s.device === device : s.device !== device);
 
   const payload = JSON.stringify(test
-    ? { title: "Lista", body: "Notificações ativadas. Você vai saber quando alguém botar algo na lista." }
+    ? { title: "Lista", body: "Notificações ativadas. Você vai saber quando alguém adicionar algo na lista." }
     : { title: "Lista", body: message(clip(body.by, 30), names) });
 
   let sent = 0;

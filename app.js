@@ -208,7 +208,7 @@ function sugMenu(){
   if (!S.q.trim()) return "";
   const sug = suggestions(S.q);
   return `<ul class="suggest" role="listbox">${sug.map((it, k) => `<li><button data-sug="${it.id}" class="${k === S.sugIdx ? "on" : ""}"><span class="em">${emojiOf(it)}</span><span class="nm">${hl(it.name, S.q)}</span>${stateTag(it) || `<span class="tag">${esc(it.cat)}</span>`}</button></li>`).join("")}
-    ${exactExists() ? "" : `<li><button data-new="1" class="${S.sugIdx === sug.length ? "on" : ""}"><span class="em">＋</span><span class="nm">Bota “<b>${esc(S.q.trim())}</b>” na lista</span></button></li>`}</ul>`;
+    ${exactExists() ? "" : `<li><button data-new="1" class="${S.sugIdx === sug.length ? "on" : ""}"><span class="em">＋</span><span class="nm">Adicionar “<b>${esc(S.q.trim())}</b>” na lista</span></button></li>`}</ul>`;
 }
 
 /* ---------- render ---------- */
@@ -219,7 +219,7 @@ function render(){
   $("#title").textContent = S.tab === "lista" ? "Lista" : S.tab === "catalogo" ? "Catálogo" : "Cartões";
   if (S.shell !== S.tab){
     $("#fieldHost").innerHTML = S.tab === "lista"
-      ? `<div class="search">${I_SEARCH}<input id="addInput" type="text" placeholder="Bota na lista…" autocomplete="off" autocorrect="off" autocapitalize="sentences" enterkeyhint="done" aria-label="Adicionar item"><div id="sugHost"></div></div>`
+      ? `<div class="search">${I_SEARCH}<input id="addInput" type="text" placeholder="Adicionar na lista…" autocomplete="off" autocorrect="off" autocapitalize="sentences" enterkeyhint="done" aria-label="Adicionar item"><div id="sugHost"></div></div>`
       : S.tab === "catalogo" ? `<div class="search">${I_SEARCH}<input id="catInput" type="search" placeholder="Procurar" autocomplete="off" aria-label="Procurar no catálogo"></div>` : "";
     S.shell = S.tab;
     if ($("#addInput")) $("#addInput").value = S.q;
@@ -249,7 +249,7 @@ function rowHTML(it, mode){
     <div class="line">${em}<button class="name" data-act="sheet">${esc(it.name)}</button><button class="miss" data-act="back">Achei</button></div></div></li>`;
   const on = onList(it);
   return `<li class="row" data-id="${it.id}" data-swipe="del"><div class="row-bg del">Apagar</div><div class="row-fg">
-    <button class="chk ${on && it.state !== "next" ? "on" : ""} ${it.state === "next" ? "next" : ""}" data-act="toggle" aria-pressed="${on}" aria-label="${on ? "Tirar da lista" : "Botar na lista"}: ${esc(it.name)}">${I_CHECK}</button>
+    <button class="chk ${on && it.state !== "next" ? "on" : ""} ${it.state === "next" ? "next" : ""}" data-act="toggle" aria-pressed="${on}" aria-label="${on ? "Tirar da lista" : "Adicionar na lista"}: ${esc(it.name)}">${I_CHECK}</button>
     <div class="line">${em}<button class="name" data-act="sheet">${esc(it.name)}</button>${it.state === "next" || it.state === "cart" ? stateTag(it) : ""}</div></div></li>`;
 }
 function groupBlock(key, title, count, inner, cls = ""){
@@ -290,8 +290,8 @@ function viewCatalogo(){
   const top = itemsArr().filter(i => (i.count || 0) >= 2).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "pt")).slice(0, 12);
   let h = "";
   if (!q && top.length) h += `<section class="grp"><div class="sec" style="cursor:default"><h2>Sempre compramos</h2></div><div class="chips">${top.map(i => `<button class="chip ${onList(i) && i.state !== "next" ? "on" : ""} ${i.state === "next" ? "next" : ""}" data-chip="${i.id}">${emojiOf(i)} ${esc(i.name)}</button>`).join("")}</div></section>`;
-  if (!S.items.size) h += `<div class="empty"><strong>Catálogo vazio</strong>Tudo o que vocês botarem na lista fica guardado aqui.</div>`;
-  else if (!items.length) h += `<div class="empty"><strong>Nada encontrado</strong><button class="btn gray" data-newcat="1">Bota “${esc(S.cq.trim())}” na lista</button></div>`;
+  if (!S.items.size) h += `<div class="empty"><strong>Catálogo vazio</strong>Tudo o que vocês adicionarem na lista fica guardado aqui.</div>`;
+  else if (!items.length) h += `<div class="empty"><strong>Nada encontrado</strong><button class="btn gray" data-newcat="1">Adicionar “${esc(S.cq.trim())}” na lista</button></div>`;
   else h += grouped(items, "catalog");
   return h;
 }
@@ -413,7 +413,7 @@ function openItemSheet(id){
   const acts = it.state === "list" ? `<button data-a="next">Não tem, fica para a próxima</button><button data-a="catalog">Tirar da lista</button>`
     : it.state === "next" ? `<button data-a="list">Voltar para esta compra</button><button data-a="catalog">Tirar da lista</button>`
     : it.state === "cart" ? `<button data-a="list">Tirar do carrinho</button>`
-    : `<button data-a="list">Bota na lista</button>`;
+    : `<button data-a="list">Adicionar na lista</button>`;
   let emoji = it.emoji || null;
   openSheet(`<h3>${esc(it.name)}</h3>
     <div class="group">${acts}</div>
@@ -700,9 +700,9 @@ async function openNotifySheet(){
   else if (Notification.permission === "denied") status = "As notificações estão bloqueadas. Ative em Ajustes → Notificações → Lista.";
   const canAct = !status;
   openSheet(`<h3>Notificações</h3>
-    <p class="foot-note" style="margin:0 4px;font-size:15px;color:var(--ink2)">Receba um aviso quando alguém botar algo na lista. Você não recebe aviso dos itens que você mesmo botar.</p>
+    <p class="foot-note" style="margin:0 4px;font-size:15px;color:var(--ink2)">Receba um aviso quando alguém adicionar algo na lista. Você não recebe aviso dos itens que você mesmo adicionar.</p>
     <div class="group"><label><span class="k">Seu nome</span><input type="text" id="nName" placeholder="Rodrigo" value="${esc(name)}" autocomplete="off"></label></div>
-    <p class="foot-note">Aparece nos avisos do outro celular: “${esc(name || "Seu nome")} botou Pão na lista”.</p>
+    <p class="foot-note">Aparece nos avisos do outro celular: “${esc(name || "Seu nome")} adicionou Pão na lista”.</p>
     ${status ? `<p class="foot-note warn" style="font-size:15px">${esc(status)}</p>` : ""}
     <p class="foot-note" id="nStatus">${on ? "Ativadas neste celular." : ""}</p>
     ${canAct ? (on
@@ -736,7 +736,7 @@ $("#bell").addEventListener("click", openNotifySheet);
 
 /* ---------- new version banner ---------- */
 // Bump APP_VERSION here and in version.json on every release.
-const APP_VERSION = "2026-10-14.7";
+const APP_VERSION = "2026-10-14.8";
 let updateShown = false;
 async function checkVersion(){
   if (updateShown || document.hidden || location.protocol === "file:") return;
