@@ -237,7 +237,7 @@ function rowHTML(it, mode){
   const em = `<span class="em" aria-hidden="true">${emojiOf(it)}</span>`;
   if (mode === "list") return `<li class="row" data-id="${it.id}" data-swipe="remove"><div class="row-bg rm">Remover</div><div class="row-fg">
     <button class="chk" data-act="cart" aria-label="Pegar ${esc(it.name)}">${I_CHECK}</button>
-    <div class="line">${em}<button class="name" data-act="sheet">${esc(it.name)}</button><button class="miss" data-act="next">Não tinha</button></div></div></li>`;
+    <div class="line">${em}<button class="name" data-act="sheet">${esc(it.name)}</button><button class="miss" data-act="next">Não tem</button></div></div></li>`;
   if (mode === "cart") return `<li class="row done" data-id="${it.id}"><div class="row-fg">
     <button class="chk on" data-act="uncart" aria-label="Tirar ${esc(it.name)} do carrinho">${I_CHECK}</button>
     <div class="line">${em}<button class="name" data-act="uncart">${esc(it.name)}</button></div></div></li>`;
@@ -271,8 +271,8 @@ function viewLista(list, cart, next){
   if (!list.length && !cart.length) h += `<div class="empty"><strong>Nada na lista</strong>Digite acima ou marque itens no Catálogo.</div>`;
   else if (!list.length) h += `<div class="empty"><strong>Tudo no carrinho</strong>Toque em Finalizar compra ao sair do mercado.</div>`;
   else h += grouped(list, "list");
-  if (list.length && !LS.get("lista.hintSeen", false)) h += `<p class="hint">Toque no círculo quando pegar o item. Se o mercado não tinha, toque em “Não tinha”. Para tirar um item da lista, arraste para a esquerda.</p>`;
-  if (next.length) h += groupBlock("x:next", "Próxima vez", next.length, `<ul class="rows">${next.map(i => rowHTML(i, "next")).join("")}</ul><p class="hint">Não tinha no mercado. Volta para a lista quando você finalizar a compra.</p>`, "blue");
+  if (list.length && !LS.get("lista.hintSeen", false)) h += `<p class="hint">Toque no círculo quando pegar o item. Se o mercado não tem, toque em “Não tem”. Para tirar um item da lista, arraste para a esquerda.</p>`;
+  if (next.length) h += groupBlock("x:next", "Próxima vez", next.length, `<ul class="rows">${next.map(i => rowHTML(i, "next")).join("")}</ul><p class="hint">Em falta no mercado. Volta para a lista quando você finalizar a compra.</p>`, "blue");
   if (cart.length){
     const open = S.openCart;
     h += `<section class="grp"><button class="sec" id="foldCart" aria-expanded="${open}"><h2>No carrinho<span class="n">${cart.length}</span></h2>${I_CHEV}</button>${open ? `<ul class="rows">${cart.sort((a, b) => (b.cart_at || 0) - (a.cart_at || 0)).map(i => rowHTML(i, "cart")).join("")}</ul>` : ""}</section>`;
@@ -362,7 +362,7 @@ $("#body").addEventListener("click", e => {
 });
 $("#finish").addEventListener("click", openFinish);
 
-/* swipe left on a list row = não tinha */
+/* swipe left on a list row = remove from list; in the catalog = delete */
 (function(){
   let st = null;
   const body = $("#body");
@@ -407,7 +407,7 @@ document.addEventListener("keydown", e => { if (e.key === "Escape") { closeSheet
 function openItemSheet(id){
   const it = S.items.get(id); if (!it) return;
   const opts = CATS.map(c => `<option ${c === it.cat ? "selected" : ""}>${esc(c)}</option>`).join("");
-  const acts = it.state === "list" ? `<button data-a="next">Não tinha, fica para a próxima</button><button data-a="catalog">Tirar da lista</button>`
+  const acts = it.state === "list" ? `<button data-a="next">Não tem, fica para a próxima</button><button data-a="catalog">Tirar da lista</button>`
     : it.state === "next" ? `<button data-a="list">Voltar para esta compra</button><button data-a="catalog">Tirar da lista</button>`
     : it.state === "cart" ? `<button data-a="list">Tirar do carrinho</button>`
     : `<button data-a="list">Bota na lista</button>`;
@@ -418,8 +418,10 @@ function openItemSheet(id){
       <label><span class="k">Categoria</span><select id="eCat">${opts}</select></label>
       <button type="button" id="eEmojiBtn" class="emoji-row"><span class="k">Emoji</span><span class="emoji-cur" id="eEmoji">${emojiOf(it)}</span></button></div>
     <div class="emoji-panel" id="ePanel" hidden>
-      <div class="emoji-grid">${EMOJI_PICK.map(e => `<button type="button" data-emoji="${e}" aria-label="${e}">${e}</button>`).join("")}</div>
-      <div class="group"><label><span class="k">Outro</span><input type="text" id="eEmojiType" placeholder="Digite um emoji" autocomplete="off"></label>
+      ${(() => { const used = [...new Set(itemsArr().map(emojiOf))]; const rest = EMOJI_PICK.filter(e => !used.includes(e));
+        const btn = e => `<button type="button" data-emoji="${e}" aria-label="${e}">${e}</button>`;
+        return `<div class="emoji-grid"><p class="emoji-h">Usados no catálogo</p>${used.map(btn).join("")}<p class="emoji-h">Mais</p>${rest.map(btn).join("")}</div>`; })()}
+      <div class="group"><label><span class="k">Outro</span><input type="text" id="eEmojiType" placeholder="Toque e use o teclado 😀" autocomplete="off"></label>
         <button type="button" id="eEmojiAuto">Usar automático</button></div>
     </div>
     <div class="acts"><button class="btn primary" data-a="save">Salvar</button><button class="btn gray" data-close>Fechar</button></div>
@@ -457,7 +459,7 @@ function openItemSheet(id){
 function openFinish(){
   const cart = byState("cart"), next = byState("next"), list = byState("list");
   const lines = [`${cart.length} ${cart.length === 1 ? "item comprado volta" : "itens comprados voltam"} para o catálogo.`];
-  if (next.length) lines.push(`${next.length} ${next.length === 1 ? "item que não tinha volta" : "itens que não tinham voltam"} para a lista.`);
+  if (next.length) lines.push(`${next.length} ${next.length === 1 ? "item em falta volta" : "itens em falta voltam"} para a lista.`);
   if (list.length) lines.push(`${list.length} ${list.length === 1 ? "item não marcado continua" : "itens não marcados continuam"} na lista.`);
   openSheet(`<h3>Finalizar compra</h3><p class="foot-note" style="margin:0 4px;font-size:15px;color:var(--ink2)">${lines.join("<br>")}</p>
     <div class="acts"><button class="btn primary" id="doFinish">Finalizar</button><button class="btn gray" data-close>Voltar</button></div>`, el => {
@@ -633,7 +635,7 @@ function toast(msg, label, fn){
 
 /* ---------- new version banner ---------- */
 // Bump APP_VERSION here and in version.json on every release.
-const APP_VERSION = "2026-10-14.5";
+const APP_VERSION = "2026-10-14.6";
 let updateShown = false;
 async function checkVersion(){
   if (updateShown || document.hidden || location.protocol === "file:") return;

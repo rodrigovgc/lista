@@ -117,6 +117,8 @@ nav.tabs button[aria-selected="true"]{color:var(--accent)}
 .scrim{position:fixed;inset:0;background:var(--scrim);z-index:20;display:flex;align-items:flex-end;justify-content:center}
 .sheet{background:#F2F2F7;width:100%;max-width:680px;border-radius:14px 14px 0 0;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:8px calc(20px + env(safe-area-inset-bottom,0px));max-height:90%;overflow-y:auto;display:flex;flex-direction:column;gap:14px;animation:up .25s cubic-bezier(.2,.8,.2,1)}
 @keyframes up{from{transform:translateY(40px);opacity:.5}}
+.sheet > *{flex-shrink:0}
+.emoji-h{grid-column:1/-1;margin:6px 4px 0;font-size:13px;font-weight:600;color:var(--muted)}
 .grab{width:36px;height:5px;border-radius:9px;background:#C7C7CC;margin:0 auto 2px}
 .sheet h3{font-family:var(--display);font-size:22px;font-weight:700;margin:4px 0 0;overflow-wrap:anywhere;line-height:1.2}
 .group{background:var(--bg);border-radius:12px;overflow:hidden}
