@@ -601,6 +601,32 @@ function toast(msg, label, fn){
   document.body.appendChild(t); toastT = setTimeout(() => t.remove(), label ? 5000 : 2600);
 }
 
+/* ---------- new version banner ---------- */
+// Bump APP_VERSION here and in version.json on every release.
+const APP_VERSION = "2026-10-14.3";
+let updateShown = false;
+async function checkVersion(){
+  if (updateShown || document.hidden || location.protocol === "file:") return;
+  try {
+    const r = await fetch(`version.json?t=${Date.now()}`, { cache: "no-store" });
+    if (!r.ok) return;
+    const { version } = await r.json();
+    if (version && version !== APP_VERSION) showUpdate();
+  } catch(e){ /* offline: try again later */ }
+}
+function showUpdate(){
+  updateShown = true;
+  const b = document.createElement("div"); b.className = "update"; b.setAttribute("role", "status");
+  b.innerHTML = `<span>Nova versão disponível</span><button class="update-go">Atualizar</button><button class="update-x" aria-label="Agora não"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>`;
+  b.querySelector(".update-go").onclick = () => location.reload();
+  b.querySelector(".update-x").onclick = () => b.remove();
+  document.body.appendChild(b);
+}
+setInterval(checkVersion, 5 * 60 * 1000);
+document.addEventListener("visibilitychange", checkVersion);
+window.addEventListener("focus", checkVersion);
+checkVersion();
+
 /* ---------- boot ---------- */
 S.outbox.forEach(o => o.sending = false);
 render();
