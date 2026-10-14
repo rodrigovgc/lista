@@ -8,7 +8,8 @@ create table if not exists public.items (
   count     integer not null default 0,
   last_at   bigint  not null default 0,
   added_at  bigint  not null default 0,
-  cart_at   bigint  not null default 0
+  cart_at   bigint  not null default 0,
+  emoji     text
 );
 
 create table if not exists public.cards (
@@ -31,3 +32,6 @@ create policy "lista_cards_open" on public.cards for all to anon using (true) wi
 
 -- Live updates between the two phones.
 alter publication supabase_realtime add table public.items, public.cards;
+
+-- Added later: custom emoji per item (safe to run again).
+alter table public.items add column if not exists emoji text;

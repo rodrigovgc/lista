@@ -127,7 +127,13 @@ function setSync(){
 const itemsArr = () => [...S.items.values()];
 const byState = st => itemsArr().filter(i => i.state === st);
 const onList = i => i.state === "list" || i.state === "cart" || i.state === "next";
-const emojiOf = i => guessEmoji(i.name, i.cat);
+const emojiOf = i => i.emoji || guessEmoji(i.name, i.cat);
+const EMOJI_PICK = "🍎 🍐 🍊 🍋 🍌 🍉 🍇 🍓 🫐 🍈 🍒 🍑 🥭 🍍 🥥 🥝 🍅 🥑 🥦 🥬 🥒 🌶️ 🫑 🌽 🥕 🧄 🧅 🥔 🍠 🫚 🍄 🫘 🌿 🎃 🍞 🥐 🥖 🫓 🥨 🥯 🥞 🥛 🧀 🧈 🥚 🍦 🍨 🥩 🍗 🍖 🥓 🌭 🍔 🐟 🍤 🦐 🍚 🍝 🌾 🥫 🍯 🫒 🧂 🥜 ☕ 🍵 🧃 🥤 💧 🍺 🍷 🍫 🍪 🍿 🍬 🍰 🧁 🍕 🍱 🍲 🧊 🧻 🧼 🪥 🧴 🧽 🧺 🗑️ 🧹 🪒 🩹 💊 🐶 🐱 👶 🛒".split(" ");
+function firstEmoji(str){
+  const t = String(str || "").trim(); if (!t) return "";
+  try { const seg = new Intl.Segmenter(undefined, { granularity: "grapheme" }); const g = [...seg.segment(t)][0]; return g ? g.segment : ""; }
+  catch(e){ return [...t][0] || ""; }
+}
 
 function setItem(id, patch){ if (S.items.has(id)) queueWrite("items", id, patch, false); }
 function createItem(name){
@@ -405,12 +411,28 @@ function openItemSheet(id){
     : it.state === "next" ? `<button data-a="list">Voltar para esta compra</button><button data-a="catalog">Tirar da lista</button>`
     : it.state === "cart" ? `<button data-a="list">Tirar do carrinho</button>`
     : `<button data-a="list">Bota na lista</button>`;
-  openSheet(`<h3>${emojiOf(it)} ${esc(it.name)}</h3>
+  let emoji = it.emoji || null;
+  openSheet(`<h3>${esc(it.name)}</h3>
     <div class="group">${acts}</div>
     <div class="group"><label><span class="k">Nome</span><input type="text" id="eName" value="${esc(it.name)}"></label>
-      <label><span class="k">Categoria</span><select id="eCat">${opts}</select></label></div>
+      <label><span class="k">Categoria</span><select id="eCat">${opts}</select></label>
+      <button type="button" id="eEmojiBtn" class="emoji-row"><span class="k">Emoji</span><span class="emoji-cur" id="eEmoji">${emojiOf(it)}</span></button></div>
+    <div class="emoji-panel" id="ePanel" hidden>
+      <div class="emoji-grid">${EMOJI_PICK.map(e => `<button type="button" data-emoji="${e}" aria-label="${e}">${e}</button>`).join("")}</div>
+      <div class="group"><label><span class="k">Outro</span><input type="text" id="eEmojiType" placeholder="Digite um emoji" autocomplete="off"></label>
+        <button type="button" id="eEmojiAuto">Usar automático</button></div>
+    </div>
     <div class="acts"><button class="btn primary" data-a="save">Salvar</button><button class="btn gray" data-close>Fechar</button></div>
     <div class="group"><button class="red" data-a="del" id="delBtn">Apagar do catálogo</button></div>`, el => {
+    const showEmoji = () => { $("#eEmoji", el).textContent = emoji || guessEmoji($("#eName", el).value || it.name, $("#eCat", el).value); };
+    $("#eEmojiBtn", el).addEventListener("click", () => { const p = $("#ePanel", el); p.hidden = !p.hidden; });
+    $("#ePanel", el).addEventListener("click", e => {
+      const b = e.target.closest("[data-emoji]"); if (!b) return;
+      emoji = b.dataset.emoji; showEmoji(); $("#ePanel", el).hidden = true;
+    });
+    $("#eEmojiType", el).addEventListener("input", e => { const v = firstEmoji(e.target.value); if (v) { emoji = v; e.target.value = v; showEmoji(); } });
+    $("#eEmojiAuto", el).addEventListener("click", () => { emoji = null; showEmoji(); $("#ePanel", el).hidden = true; });
+    $("#eCat", el).addEventListener("change", showEmoji);
     el.addEventListener("click", e => {
       const a = e.target.closest("[data-a]")?.dataset.a; if (!a) return;
       if (a === "save"){
@@ -418,7 +440,9 @@ function openItemSheet(id){
         if (!name) { $("#eName", el).focus(); return; }
         const dup = itemsArr().find(i => i.id !== id && norm(i.name) === norm(name));
         if (dup) { toast(`“${dup.name}” já existe no catálogo`); return; }
-        setItem(id, { name, cat }); closeSheet();
+        const patch = { name, cat };
+        if ((emoji || null) !== (it.emoji || null)) patch.emoji = emoji;
+        setItem(id, patch); closeSheet();
       } else if (a === "del"){
         const b = $("#delBtn", el);
         if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = "Toque de novo para apagar de vez"; return; }
@@ -609,7 +633,7 @@ function toast(msg, label, fn){
 
 /* ---------- new version banner ---------- */
 // Bump APP_VERSION here and in version.json on every release.
-const APP_VERSION = "2026-10-14.4";
+const APP_VERSION = "2026-10-14.5";
 let updateShown = false;
 async function checkVersion(){
   if (updateShown || document.hidden || location.protocol === "file:") return;
@@ -628,9 +652,11 @@ function showUpdate(){
   b.querySelector(".update-x").onclick = () => b.remove();
   document.body.appendChild(b);
 }
-setInterval(checkVersion, 5 * 60 * 1000);
+setInterval(checkVersion, 60 * 1000);
 document.addEventListener("visibilitychange", checkVersion);
 window.addEventListener("focus", checkVersion);
+window.addEventListener("pageshow", checkVersion);
+window.addEventListener("online", checkVersion);
 checkVersion();
 
 /* ---------- boot ---------- */
