@@ -169,6 +169,16 @@ nav.tabs button[aria-selected="true"]{color:var(--accent)}
 .emoji-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(44px,1fr));gap:4px;background:var(--bg);border-radius:12px;padding:8px;max-height:220px;overflow-y:auto}
 .emoji-grid button{height:44px;font-size:26px;border-radius:10px}
 .emoji-grid button:active{background:var(--fill)}
+.aisle-link{display:block;margin:18px auto 0;color:var(--blue);font-size:15px;padding:8px 12px}
+.ord-list{list-style:none;margin:0;padding:0;background:var(--bg);border-radius:12px;overflow:hidden;touch-action:none}
+.ord{display:flex;align-items:center;gap:10px;min-height:50px;padding:0 6px 0 14px;background:var(--bg);border-top:.5px solid var(--sep);position:relative}
+.ord:first-child{border-top:0}
+.ord.dragging{z-index:2;box-shadow:0 8px 24px rgba(0,0,0,.18);border-radius:10px;border-top-color:transparent}
+.ord-n{width:20px;color:var(--muted);font-size:14px;font-variant-numeric:tabular-nums}
+.ord-name{flex:1;min-width:0;display:flex;flex-direction:column}
+.ord-name small{color:var(--muted);font-size:13px}
+.ord-handle{width:44px;height:44px;display:grid;place-items:center;color:#C7C7CC;cursor:grab;touch-action:none}
+.ord-handle svg{width:22px;height:22px}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>

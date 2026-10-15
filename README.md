@@ -51,3 +51,17 @@ One-time setup:
 Finishing a trip also notifies the other phone ("Rodrigo finalizou a compra: 12 itens comprados. Em falta: Pão"). Adds are grouped: the other phone gets one notification a few seconds after you stop adding, or as soon as you leave the app. You never get notified about your own adds.
 
 If the private key is ever lost, generate a new key pair, put the public one in `config.js` and `api/notify.js`, the private one in Vercel, and turn notifications on again on each phone.
+
+## Aisle order
+
+Run `supabase/5-aisles.sql` once. Then in the app: **Ordem dos corredores** (bottom of the Lista or Catálogo), drag the categories, **Salvar**. Both phones use the same order.
+
+## Siri ("Adicionar na Lista")
+
+`api/add.js` adds items by name: POST JSON `{"item": "leite e pão", "by": "Rodrigo"}` to `https://lista-rs47.vercel.app/api/add`. It reuses catalog items (ignoring accents and a final "s"), creates new ones with a category, notifies the other phone, and replies with a sentence for Siri to read.
+
+Shortcut (Shortcuts app → +):
+1. **Ask for Input** — Text, prompt "O que adicionar?"
+2. **Get Contents of URL** — the URL above; Method **POST**; Request Body **JSON**; fields `item` = *Provided Input*, `by` = your name (exactly as typed in the bell settings).
+3. **Show Result** — *Contents of URL*.
+Name it "Adicionar na Lista".

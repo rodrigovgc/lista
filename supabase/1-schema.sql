@@ -45,3 +45,13 @@ create table if not exists public.push_subs (
 alter table public.push_subs enable row level security;
 drop policy if exists "lista_push_open" on public.push_subs;
 create policy "lista_push_open" on public.push_subs for all to anon using (true) with check (true);
+create table if not exists public.settings (
+  id    text primary key,
+  value jsonb
+);
+alter table public.settings enable row level security;
+drop policy if exists "lista_settings_open" on public.settings;
+create policy "lista_settings_open" on public.settings for all to anon using (true) with check (true);
+do $$ begin
+  alter publication supabase_realtime add table public.settings;
+exception when duplicate_object then null; end $$;

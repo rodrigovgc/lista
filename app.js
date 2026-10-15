@@ -16,6 +16,7 @@ const LS = {
 const S = {
   items: new Map(LS.get("lista.items", []).map(r => [r.id, r])),
   cards: new Map(LS.get("lista.cards", []).map(r => [r.id, r])),
+  settings: new Map(LS.get("lista.settings", []).map(r => [r.id, r])),
   outbox: LS.get("lista.outbox", []),
   collapsed: new Set(LS.get("lista.collapsed", [])),
   tab: LS.get("lista.tab", "lista"),
@@ -25,6 +26,7 @@ const S = {
 function persist(){
   LS.set("lista.items", [...S.items.values()]);
   LS.set("lista.cards", [...S.cards.values()]);
+  LS.set("lista.settings", [...S.settings.values()]);
   LS.set("lista.outbox", S.outbox);
 }
 
@@ -33,7 +35,7 @@ const CONFIG = window.LISTA_CONFIG || {};
 const configured = CONFIG.supabaseUrl && CONFIG.supabaseAnonKey && !/COLE|PASTE/.test(CONFIG.supabaseUrl + CONFIG.supabaseAnonKey);
 const sb = configured && window.supabase ? window.supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseAnonKey, { auth: { persistSession: false } }) : null;
 
-const tableMap = t => t === "items" ? S.items : S.cards;
+const tableMap = t => t === "items" ? S.items : t === "cards" ? S.cards : S.settings;
 function newId(p){ return p + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 
 function queueWrite(table, id, patch, isNew){
@@ -86,9 +88,10 @@ async function load(){
   if (loading) return loading;
   loading = (async () => {
     try {
-      const [a, b] = await Promise.all([sb.from("items").select("*"), sb.from("cards").select("*")]);
+      const [a, b, c] = await Promise.all([sb.from("items").select("*"), sb.from("cards").select("*"), sb.from("settings").select("*")]);
       if (!a.error) S.items = new Map(a.data.map(r => [r.id, r]));
       if (!b.error) S.cards = new Map(b.data.map(r => [r.id, r]));
+      if (!c.error && Array.isArray(c.data)) S.settings = new Map(c.data.map(r => [r.id, r]));
       if (!a.error || !b.error){ applyOutboxLocally(); S.loadedOnce = true; persist(); render(); }
     } catch(e){}
     loading = null;
@@ -107,6 +110,7 @@ function startRealtime(){
   sb.channel("lista")
     .on("postgres_changes", { event: "*", schema: "public", table: "items" }, p => onRemote("items", p))
     .on("postgres_changes", { event: "*", schema: "public", table: "cards" }, p => onRemote("cards", p))
+    .on("postgres_changes", { event: "*", schema: "public", table: "settings" }, p => onRemote("settings", p))
     .subscribe(st => { if (st === "SUBSCRIBED") load(); });
 }
 window.addEventListener("online", () => { S.online = true; flush(); load(); });
@@ -257,7 +261,7 @@ function groupBlock(key, title, count, inner, cls = ""){
   return `<section class="grp"><button class="sec ${cls}" data-fold="${esc(key)}" aria-expanded="${open}"><h2>${esc(title)}<span class="n">${count}</span></h2>${I_CHEV}</button>${open ? inner : ""}</section>`;
 }
 function grouped(items, mode){
-  const g = new Map(CATS.map(c => [c, []]));
+  const g = new Map(orderedCats().map(c => [c, []]));
   items.forEach(i => (g.get(i.cat) || g.get("Outros")).push(i));
   let h = "";
   for (const [c, arr] of g){
@@ -267,6 +271,55 @@ function grouped(items, mode){
   }
   return h;
 }
+/* ---------- aisle order ---------- */
+// One shared order of categories (the way you walk through the store), stored in Supabase.
+function orderedCats(){
+  const saved = (S.settings.get("cat_order") || {}).value;
+  const list = Array.isArray(saved) ? saved.filter(c => CATS.includes(c)) : [];
+  return [...list, ...CATS.filter(c => !list.includes(c))];
+}
+const aisleLink = () => `<button class="aisle-link" id="aisleBtn">Ordem dos corredores</button>`;
+function openAisleSheet(){
+  let order = orderedCats();
+  const counts = {}; itemsArr().forEach(i => { if (i.state === "list") counts[i.cat] = (counts[i.cat] || 0) + 1; });
+  const rows = () => order.map((c, k) => `<li class="ord" data-cat="${esc(c)}"><span class="ord-n">${k + 1}</span><span class="em">${CAT_EMOJI[c] || "🛒"}</span><span class="ord-name">${esc(c)}${counts[c] ? `<small>${counts[c]} na lista</small>` : ""}</span><span class="ord-handle" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 9h14M5 15h14"/></svg></span></li>`).join("");
+  openSheet(`<h3>Ordem dos corredores</h3>
+    <p class="foot-note" style="margin:0 4px;font-size:15px;color:var(--ink2)">Arraste as categorias na ordem em que vocês andam no mercado. A lista segue essa ordem nos dois celulares.</p>
+    <ul class="ord-list" id="ordList">${rows()}</ul>
+    <div class="acts"><button class="btn primary" id="ordSave">Salvar</button><button class="btn gray" data-close>Cancelar</button></div>
+    <div class="group"><button id="ordReset">Voltar para a ordem padrão</button></div>`, el => {
+    const ul = $("#ordList", el);
+    const sync = () => { order = [...ul.children].map(li => li.dataset.cat); [...ul.children].forEach((li, k) => li.querySelector(".ord-n").textContent = k + 1); };
+    let drag = null;
+    ul.addEventListener("pointerdown", e => {
+      const h = e.target.closest(".ord-handle"); if (!h) return;
+      e.preventDefault();
+      const li = h.closest(".ord"); const r = li.getBoundingClientRect();
+      drag = { li, startY: e.clientY, h: r.height, pid: e.pointerId };
+      li.classList.add("dragging"); try { ul.setPointerCapture(e.pointerId); } catch(_){}
+    });
+    ul.addEventListener("pointermove", e => {
+      if (!drag || e.pointerId !== drag.pid) return;
+      e.preventDefault();
+      const dy = e.clientY - drag.startY;
+      drag.li.style.transform = `translateY(${dy}px)`;
+      const steps = Math.trunc(dy / drag.h);
+      if (steps !== 0){
+        const sibs = [...ul.children], i = sibs.indexOf(drag.li), j = Math.max(0, Math.min(sibs.length - 1, i + steps));
+        if (j !== i){
+          ul.insertBefore(drag.li, j > i ? sibs[j].nextSibling : sibs[j]);
+          drag.startY += (j - i) * drag.h; drag.li.style.transform = `translateY(${e.clientY - drag.startY}px)`;
+          sync();
+        }
+      }
+    });
+    const end = () => { if (!drag) return; drag.li.classList.remove("dragging"); drag.li.style.transform = ""; drag = null; sync(); };
+    ul.addEventListener("pointerup", end); ul.addEventListener("pointercancel", end);
+    $("#ordSave", el).addEventListener("click", () => { queueWrite("settings", "cat_order", { value: order }, true); closeSheet(); toast("Ordem salva"); });
+    $("#ordReset", el).addEventListener("click", () => { order = [...CATS]; ul.innerHTML = rows(); });
+  });
+}
+
 function viewLista(list, cart, next){
   if (!sb) return setupNotice();
   if (!S.loadedOnce) return `<div class="empty"><strong>Carregando…</strong>A lista aparece em instantes.</div>`;
@@ -280,6 +333,7 @@ function viewLista(list, cart, next){
     const open = S.openCart;
     h += `<section class="grp"><button class="sec" id="foldCart" aria-expanded="${open}"><h2>No carrinho<span class="n">${cart.length}</span></h2>${I_CHEV}</button>${open ? `<ul class="rows">${cart.sort((a, b) => (b.cart_at || 0) - (a.cart_at || 0)).map(i => rowHTML(i, "cart")).join("")}</ul>` : ""}</section>`;
   }
+  if (list.length > 1) h += aisleLink();
   return h;
 }
 function viewCatalogo(){
@@ -293,6 +347,7 @@ function viewCatalogo(){
   if (!S.items.size) h += `<div class="empty"><strong>Catálogo vazio</strong>Tudo o que vocês adicionarem na lista fica guardado aqui.</div>`;
   else if (!items.length) h += `<div class="empty"><strong>Nada encontrado</strong><button class="btn gray" data-newcat="1">Adicionar “${esc(S.cq.trim())}” na lista</button></div>`;
   else h += grouped(items, "catalog");
+  if (items.length && !q) h += aisleLink();
   return h;
 }
 function viewCartoes(){
@@ -350,6 +405,7 @@ $("#body").addEventListener("click", e => {
   const fold = e.target.closest("[data-fold]");
   if (fold) { const k = fold.dataset.fold; S.collapsed.has(k) ? S.collapsed.delete(k) : S.collapsed.add(k); LS.set("lista.collapsed", [...S.collapsed]); render(); return; }
   if (e.target.closest("#foldCart")) { S.openCart = !S.openCart; render(); return; }
+  if (e.target.closest("#aisleBtn")) { openAisleSheet(); return; }
   if (e.target.closest("[data-newcat]")) { const v = S.cq; S.cq = ""; $("#catInput").value = ""; createItem(v); return; }
   const card = e.target.closest("[data-card]"); if (card) { openScan(card.dataset.card); return; }
   const chip = e.target.closest("[data-chip]"); if (chip) { toggleCatalog(S.items.get(chip.dataset.chip)); return; }
@@ -721,7 +777,12 @@ async function openNotifySheet(){
       : `<button class="btn primary" id="nOn">Ativar notificações</button>`) : ""}
     <button class="btn gray" data-close>Fechar</button>`, el => {
     const setStatus = (t, cls = "") => { const p = $("#nStatus", el); p.textContent = t; p.className = "foot-note " + cls; };
-    $("#nName", el).addEventListener("input", e => LS.set("lista.name", e.target.value.trim().slice(0, 30)));
+    let nameT = null;
+    $("#nName", el).addEventListener("input", e => {
+      const v = e.target.value.trim().slice(0, 30); LS.set("lista.name", v);
+      // Keep the name on the server too, so Siri adds don't notify the person who spoke.
+      clearTimeout(nameT); nameT = setTimeout(() => { if (sb && LS.get("lista.pushOn", false)) sb.from("push_subs").update({ name: v }).eq("device", DEVICE).then(() => {}, () => {}); }, 800);
+    });
     const explain = e => {
       const m = String(e && e.message || e);
       if (m === "denied") return "Você recusou as notificações. Para ativar: Ajustes → Notificações → Lista.";
@@ -747,7 +808,7 @@ $("#bell").addEventListener("click", openNotifySheet);
 
 /* ---------- new version banner ---------- */
 // Bump APP_VERSION here and in version.json on every release.
-const APP_VERSION = "2026-10-15.1";
+const APP_VERSION = "2026-10-15.2";
 let updateShown = false;
 async function checkVersion(){
   if (updateShown || document.hidden || location.protocol === "file:") return;

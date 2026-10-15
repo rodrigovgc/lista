@@ -46,3 +46,6 @@ function guessEmoji(name, cat){
   }
   return CAT_EMOJI[cat] || "🛒";
 }
+
+// Lets the Vercel functions reuse the same categories and matching (ignored in the browser).
+if (typeof module !== "undefined" && module.exports) module.exports = { CATS, guessCat, guessEmoji, norm };
