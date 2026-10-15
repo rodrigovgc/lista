@@ -471,6 +471,7 @@ function openFinish(){
       cart.forEach(i => queueWrite("items", i.id, { state: "catalog", count: (i.count || 0) + 1, last_at: now }, false));
       next.forEach(i => queueWrite("items", i.id, { state: "list", added_at: now }, false));
       S.openCart = false; render(); toast("Compra finalizada");
+      sendFinish(cart.length, next.map(i => i.name));
     });
   });
 }
@@ -660,6 +661,16 @@ function sendAdds(){
   fetch("api/notify", { method: "POST", keepalive: true, headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ device: DEVICE, by: LS.get("lista.name", ""), names }) }).catch(() => {});
 }
+// Finishing a trip tells the other phones right away (or as soon as there is internet again).
+function sendFinish(bought, missing){
+  if (location.protocol === "file:") return;
+  const payload = { device: DEVICE, by: LS.get("lista.name", ""), kind: "finish", bought, missing };
+  LS.set("lista.pendingFinish", payload);
+  if (!navigator.onLine) return;
+  fetch("api/notify", { method: "POST", keepalive: true, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
+    .then(r => { if (r.ok) LS.set("lista.pendingFinish", null); }).catch(() => {});
+}
+window.addEventListener("online", () => { const p = LS.get("lista.pendingFinish", null); if (p) sendFinish(p.bought, p.missing); });
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") sendAdds(); });
 window.addEventListener("pagehide", sendAdds);
 window.addEventListener("online", () => { if (pendingAdds.length) sendAdds(); });
@@ -700,7 +711,7 @@ async function openNotifySheet(){
   else if (Notification.permission === "denied") status = "As notificações estão bloqueadas. Ative em Ajustes → Notificações → Lista.";
   const canAct = !status;
   openSheet(`<h3>Notificações</h3>
-    <p class="foot-note" style="margin:0 4px;font-size:15px;color:var(--ink2)">Receba um aviso quando alguém adicionar algo na lista. Você não recebe aviso dos itens que você mesmo adicionar.</p>
+    <p class="foot-note" style="margin:0 4px;font-size:15px;color:var(--ink2)">Receba um aviso quando alguém adicionar algo na lista ou finalizar uma compra. Você não recebe aviso do que você mesmo fizer.</p>
     <div class="group"><label><span class="k">Seu nome</span><input type="text" id="nName" placeholder="Rodrigo" value="${esc(name)}" autocomplete="off"></label></div>
     <p class="foot-note">Aparece nos avisos do outro celular: “${esc(name || "Seu nome")} adicionou Pão na lista”.</p>
     ${status ? `<p class="foot-note warn" style="font-size:15px">${esc(status)}</p>` : ""}
@@ -736,7 +747,7 @@ $("#bell").addEventListener("click", openNotifySheet);
 
 /* ---------- new version banner ---------- */
 // Bump APP_VERSION here and in version.json on every release.
-const APP_VERSION = "2026-10-14.8";
+const APP_VERSION = "2026-10-15.1";
 let updateShown = false;
 async function checkVersion(){
   if (updateShown || document.hidden || location.protocol === "file:") return;

@@ -18,6 +18,13 @@ function message(by, names){
   return who + " adicionou na lista: " + shown + (names.length > 6 ? " e mais " + (names.length - 6) : "");
 }
 
+function finishMessage(by, bought, missing){
+  const who = by || "Alguém";
+  let msg = who + " finalizou a compra: " + bought + (bought === 1 ? " item comprado" : " itens comprados");
+  if (missing.length) msg += ". Em falta: " + missing.slice(0, 4).join(", ") + (missing.length > 4 ? " e mais " + (missing.length - 4) : "");
+  return msg;
+}
+
 module.exports = async (req, res) => {
   if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
   const priv = process.env.VAPID_PRIVATE_KEY;
@@ -31,7 +38,11 @@ module.exports = async (req, res) => {
   if (!device) return res.status(400).json({ error: "device missing" });
   const test = body.test === true;
   const names = Array.isArray(body.names) ? body.names.map(n => clip(n, 80)).filter(Boolean).slice(0, 40) : [];
-  if (!test && !names.length) return res.status(200).json({ sent: 0 });
+  const finish = body.kind === "finish";
+  const bought = Math.max(0, Math.min(999, parseInt(body.bought, 10) || 0));
+  const missing = Array.isArray(body.missing) ? body.missing.map(n => clip(n, 80)).filter(Boolean).slice(0, 40) : [];
+  if (finish && !bought && !missing.length) return res.status(200).json({ sent: 0 });
+  if (!test && !finish && !names.length) return res.status(200).json({ sent: 0 });
 
   const r = await db("push_subs?select=endpoint,device,sub");
   if (!r.ok) return res.status(500).json({ error: "Could not read push_subs (" + r.status + ")" });
@@ -39,6 +50,7 @@ module.exports = async (req, res) => {
 
   const payload = JSON.stringify(test
     ? { title: "Lista", body: "Notificações ativadas. Você vai saber quando alguém adicionar algo na lista." }
+    : finish ? { title: "Lista", body: finishMessage(clip(body.by, 30), bought, missing) }
     : { title: "Lista", body: message(clip(body.by, 30), names) });
 
   let sent = 0;

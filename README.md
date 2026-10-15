@@ -48,6 +48,6 @@ One-time setup:
 2. **Vercel → your project → Settings → Environment Variables:** add `VAPID_PRIVATE_KEY` with the private key (kept only there, never in the code). Then **Deployments → ⋯ on the latest → Redeploy**.
 3. **On each iPhone:** open Lista from the home-screen icon (not from Safari), tap the bell at the top right, type your name, tap **Ativar notificações** and allow.
 
-Adds are grouped: the other phone gets one notification a few seconds after you stop adding, or as soon as you leave the app. You never get notified about your own adds.
+Finishing a trip also notifies the other phone ("Rodrigo finalizou a compra: 12 itens comprados. Em falta: Pão"). Adds are grouped: the other phone gets one notification a few seconds after you stop adding, or as soon as you leave the app. You never get notified about your own adds.
 
 If the private key is ever lost, generate a new key pair, put the public one in `config.js` and `api/notify.js`, the private one in Vercel, and turn notifications on again on each phone.
