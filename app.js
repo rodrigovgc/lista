@@ -456,7 +456,10 @@ let sheetEl = null;
 function openSheet(html, onMount){
   closeSheet();
   sheetEl = document.createElement("div"); sheetEl.className = "scrim";
-  sheetEl.innerHTML = `<div class="sheet" role="dialog" aria-modal="true"><div class="grab"></div>${html}</div>`;
+  // The title stays pinned at the top with a close button; the rest scrolls under it.
+  const m = html.match(/^\s*<h3>([\s\S]*?)<\/h3>/);
+  const title = m ? m[1] : "", rest = m ? html.slice(m[0].length) : html;
+  sheetEl.innerHTML = `<div class="sheet" role="dialog" aria-modal="true"><div class="sheet-head"><div class="grab"></div><div class="sheet-bar"><h3>${title}</h3><button class="sheet-x" data-close aria-label="Fechar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M7 7l10 10M17 7L7 17"/></svg></button></div></div>${rest}</div>`;
   sheetEl.addEventListener("click", e => { if (e.target === sheetEl || e.target.closest("[data-close]")) closeSheet(); });
   document.body.appendChild(sheetEl); onMount && onMount(sheetEl);
 }
@@ -808,7 +811,7 @@ $("#bell").addEventListener("click", openNotifySheet);
 
 /* ---------- new version banner ---------- */
 // Bump APP_VERSION here and in version.json on every release.
-const APP_VERSION = "2026-10-15.2";
+const APP_VERSION = "2026-10-15.3";
 let updateShown = false;
 async function checkVersion(){
   if (updateShown || document.hidden || location.protocol === "file:") return;

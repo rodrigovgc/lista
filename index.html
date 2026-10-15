@@ -123,8 +123,13 @@ nav.tabs button[aria-selected="true"]{color:var(--accent)}
 @keyframes up{from{transform:translateY(40px);opacity:.5}}
 .sheet > *{flex-shrink:0}
 .emoji-h{grid-column:1/-1;margin:6px 4px 0;font-size:13px;font-weight:600;color:var(--muted)}
-.grab{width:36px;height:5px;border-radius:9px;background:#C7C7CC;margin:0 auto 2px}
-.sheet h3{font-family:var(--display);font-size:22px;font-weight:700;margin:4px 0 0;overflow-wrap:anywhere;line-height:1.2}
+.grab{width:36px;height:5px;border-radius:9px;background:#C7C7CC;margin:0 auto 6px}
+.sheet-head{position:sticky;top:-8px;z-index:3;background:#F2F2F7;margin:-8px 0 -4px;padding:8px 0 8px}
+.sheet-bar{display:flex;align-items:center;gap:12px}
+.sheet-bar h3{flex:1;min-width:0}
+.sheet-x{flex:none;width:32px;height:32px;border-radius:50%;background:#E3E3E8;color:#6C6C70;display:grid;place-items:center}
+.sheet-x svg{width:14px;height:14px}
+.sheet h3{font-family:var(--display);font-size:22px;font-weight:700;margin:0;overflow-wrap:anywhere;line-height:1.2}
 .group{background:var(--bg);border-radius:12px;overflow:hidden}
 .group > *{display:flex;width:100%;align-items:center;min-height:46px;padding:0 16px;gap:10px}
 .group > * + *{border-top:.5px solid var(--sep)}
@@ -170,7 +175,7 @@ nav.tabs button[aria-selected="true"]{color:var(--accent)}
 .emoji-grid button{height:44px;font-size:26px;border-radius:10px}
 .emoji-grid button:active{background:var(--fill)}
 .aisle-link{display:block;margin:18px auto 0;color:var(--blue);font-size:15px;padding:8px 12px}
-.ord-list{list-style:none;margin:0;padding:0;background:var(--bg);border-radius:12px;overflow:hidden;touch-action:none}
+.ord-list{list-style:none;margin:0;padding:0;background:var(--bg);border-radius:12px;overflow:hidden}
 .ord{display:flex;align-items:center;gap:10px;min-height:50px;padding:0 6px 0 14px;background:var(--bg);border-top:.5px solid var(--sep);position:relative}
 .ord:first-child{border-top:0}
 .ord.dragging{z-index:2;box-shadow:0 8px 24px rgba(0,0,0,.18);border-radius:10px;border-top-color:transparent}
