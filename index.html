@@ -186,6 +186,28 @@ nav.tabs button[aria-selected="true"]{color:var(--accent)}
 .ord-name small{color:var(--muted);font-size:13px}
 .ord-handle{width:44px;height:44px;display:grid;place-items:center;color:#C7C7CC;cursor:grab;touch-action:none}
 .ord-handle svg{width:22px;height:22px}
+/* check-off micro-interaction */
+.chk{position:relative}
+.chk svg path{stroke-dasharray:24;stroke-dashoffset:0}
+.chk.pop{animation:chkPop .38s cubic-bezier(.3,1.6,.5,1)}
+.chk.pop svg{opacity:1}
+.chk.pop svg path{animation:chkDraw .3s .06s ease-out both}
+@keyframes chkPop{0%{transform:scale(1)}35%{transform:scale(.82)}70%{transform:scale(1.18)}100%{transform:scale(1)}}
+@keyframes chkDraw{from{stroke-dashoffset:24}to{stroke-dashoffset:0}}
+.burst{position:absolute;inset:0;pointer-events:none}
+.burst i{position:absolute;left:50%;top:50%;width:5px;height:5px;margin:-2.5px 0 0 -2.5px;border-radius:50%;background:var(--accent);animation:spark .5s .05s ease-out forwards;opacity:0}
+@keyframes spark{0%{opacity:1;transform:rotate(var(--a)) translateY(0) scale(1)}100%{opacity:0;transform:rotate(var(--a)) translateY(-20px) scale(.4)}}
+.row.checking .name{color:var(--muted);transition:color .2s}
+.row.checking .nm-t{background:linear-gradient(var(--muted),var(--muted)) no-repeat 0 58%/0% 1.5px;-webkit-box-decoration-break:clone;box-decoration-break:clone;animation:strike .3s .12s ease-out forwards}
+@keyframes strike{to{background-size:100% 1.5px}}
+.row.checking .miss{opacity:0;transition:opacity .15s}
+.row.checking{overflow:visible}
+.row.checking .row-bg{display:none}
+.row.checking.leaving{overflow:hidden}
+.row.leaving{transition:height .28s cubic-bezier(.4,0,.2,1),opacity .22s ease;opacity:0}
+.row.leaving .row-fg{transform:translateX(14px);transition:transform .28s ease}
+.finish.bump{animation:bump .35s cubic-bezier(.3,1.6,.5,1)}
+@keyframes bump{40%{transform:scale(1.08)}100%{transform:scale(1)}}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>

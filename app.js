@@ -244,7 +244,7 @@ function rowHTML(it, mode){
   const em = `<span class="em" aria-hidden="true">${emojiOf(it)}</span>`;
   if (mode === "list") return `<li class="row" data-id="${it.id}" data-swipe="remove"><div class="row-bg rm">Remover</div><div class="row-fg">
     <button class="chk" data-act="cart" aria-label="Pegar ${esc(it.name)}">${I_CHECK}</button>
-    <div class="line">${em}<button class="name" data-act="sheet">${esc(it.name)}</button><button class="miss" data-act="next">Não tem</button></div></div></li>`;
+    <div class="line">${em}<button class="name" data-act="sheet"><span class="nm-t">${esc(it.name)}</span></button><button class="miss" data-act="next">Não tem</button></div></div></li>`;
   if (mode === "cart") return `<li class="row done" data-id="${it.id}"><div class="row-fg">
     <button class="chk on" data-act="uncart" aria-label="Tirar ${esc(it.name)} do carrinho">${I_CHECK}</button>
     <div class="line">${em}<button class="name" data-act="uncart">${esc(it.name)}</button></div></div></li>`;
@@ -412,7 +412,7 @@ $("#body").addEventListener("click", e => {
   const btn = e.target.closest("[data-act]"); if (!btn) return;
   const id = btn.closest("[data-id]").dataset.id, it = S.items.get(id); if (!it) return;
   const act = btn.dataset.act;
-  if (act === "cart") { setItem(id, { state: "cart", cart_at: Date.now() }); LS.set("lista.hintSeen", true); }
+  if (act === "cart") { LS.set("lista.hintSeen", true); celebrate(btn.closest(".row"), () => setItem(id, { state: "cart", cart_at: Date.now() })); }
   else if (act === "uncart") setItem(id, { state: "list" });
   else if (act === "next") markNext(id);
   else if (act === "back") setItem(id, { state: "list", added_at: Date.now() });
@@ -420,6 +420,45 @@ $("#body").addEventListener("click", e => {
   else if (act === "sheet") openItemSheet(id);
 });
 $("#finish").addEventListener("click", openFinish);
+
+/* ---------- check-off micro-interaction ---------- */
+// The circle pops and fills, the check draws, the name is crossed out,
+// a few sparks fly, then the row folds away and the item goes to the cart.
+const reduceMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+let hapticEl = null;
+function haptic(){
+  try { if (navigator.vibrate) { navigator.vibrate(12); return; } } catch(e){}
+  // iOS Safari 18+: toggling a native switch gives a light haptic tap.
+  try {
+    if (!hapticEl){
+      hapticEl = document.createElement("label"); hapticEl.setAttribute("aria-hidden", "true");
+      hapticEl.style.cssText = "position:fixed;left:-9999px;top:0;opacity:0;pointer-events:none";
+      hapticEl.innerHTML = '<input type="checkbox" switch tabindex="-1">'; document.body.appendChild(hapticEl);
+    }
+    hapticEl.click();
+  } catch(e){}
+}
+function celebrate(row, done){
+  if (!row || row.dataset.busy) return;
+  row.dataset.busy = "1";
+  haptic();
+  if (reduceMotion()) { done(); return; }
+  const chk = row.querySelector(".chk");
+  chk.classList.add("on", "pop");
+  row.classList.add("checking");
+  const burst = document.createElement("span"); burst.className = "burst";
+  for (let i = 0; i < 6; i++){ const p = document.createElement("i"); p.style.setProperty("--a", (i * 60 + 15) + "deg"); burst.appendChild(p); }
+  chk.appendChild(burst);
+  setTimeout(() => {
+    const h = row.offsetHeight; row.style.height = h + "px"; row.offsetHeight; // lock height, then fold
+    row.classList.add("leaving"); row.style.height = "0px";
+  }, 420);
+  setTimeout(() => { done(); bumpFinish(); }, 720);
+}
+function bumpFinish(){
+  const f = $("#finish"); if (!f || f.hidden || reduceMotion()) return;
+  f.classList.remove("bump"); f.offsetWidth; f.classList.add("bump");
+}
 
 /* swipe left on a list row = remove from list; in the catalog = delete */
 (function(){
@@ -811,7 +850,7 @@ $("#bell").addEventListener("click", openNotifySheet);
 
 /* ---------- new version banner ---------- */
 // Bump APP_VERSION here and in version.json on every release.
-const APP_VERSION = "2026-10-16.1";
+const APP_VERSION = "2026-10-21.1";
 let updateShown = false;
 async function checkVersion(){
   if (updateShown || document.hidden || location.protocol === "file:") return;
