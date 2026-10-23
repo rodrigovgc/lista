@@ -55,3 +55,5 @@ create policy "lista_settings_open" on public.settings for all to anon using (tr
 do $$ begin
   alter publication supabase_realtime add table public.settings;
 exception when duplicate_object then null; end $$;
+alter table public.cards add column if not exists color text;
+alter table public.cards add column if not exists logo text;

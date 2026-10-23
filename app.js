@@ -217,6 +217,7 @@ function sugMenu(){
 
 /* ---------- render ---------- */
 function render(){
+  if (wdrag || walletSettling) { pendingRender = true; return; }
   const list = byState("list"), cart = byState("cart"), next = byState("next");
   $("#tabLista").textContent = list.length ? `Lista (${list.length})` : "Lista";
   document.querySelectorAll("nav.tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === S.tab));
@@ -231,6 +232,7 @@ function render(){
   }
   if ($("#sugHost")) $("#sugHost").innerHTML = sugMenu();
   $("#body").innerHTML = S.tab === "lista" ? viewLista(list, cart, next) : S.tab === "catalogo" ? viewCatalogo() : viewCartoes();
+  if (S.tab === "cartoes") layoutWallet(false);
   const fin = $("#finish");
   if (S.tab === "lista" && (cart.length || next.length)){
     fin.hidden = false;
@@ -352,10 +354,10 @@ function viewCatalogo(){
 }
 function viewCartoes(){
   if (!sb) return setupNotice();
-  const cards = [...S.cards.values()].sort((a, b) => (a.sort ?? 99) - (b.sort ?? 99) || a.name.localeCompare(b.name));
+  const cards = walletCards();
   if (!cards.length) return `<div class="empty"><strong>Nenhum cartão</strong>Toque em + e tire uma foto do cartão do mercado.</div>`;
-  return `<div class="cards">${cards.map(c => `<button class="card" data-card="${c.id}"><span class="face">${c.photo ? `<img src="${esc(c.photo)}" alt="">` : esc(c.name)}</span><span class="lbl">${esc(c.name)}</span></button>`).join("")}</div>
-    <p class="hint">Toque num cartão para mostrar o código no caixa.</p>`;
+  return `<div class="wallet ${S.walletOpen ? "open" : ""}" id="wallet">${cards.map(c => cardFace(c)).join("")}</div>
+    <p class="hint wallet-hint" id="walletHint"></p>`;
 }
 function setupNotice(){
   return `<div class="empty"><strong>Falta conectar o Supabase</strong>Abra o arquivo config.js e cole a URL e a chave “anon” do seu projeto Supabase.</div>`;
@@ -364,7 +366,7 @@ function setupNotice(){
 /* ---------- events ---------- */
 document.querySelector("nav.tabs").addEventListener("click", e => {
   const b = e.target.closest("button[data-tab]"); if (!b) return;
-  if (S.tab === b.dataset.tab) { window.scrollTo({ top: 0, behavior: "smooth" }); return; }
+  if (S.tab === b.dataset.tab) { if (S.tab === "cartoes" && S.walletOpen) { S.walletOpen = false; layoutWallet(true); } window.scrollTo({ top: 0, behavior: "smooth" }); return; }
   S.tab = b.dataset.tab; S.q = ""; S.sugIdx = -1; LS.set("lista.tab", S.tab);
   render(); window.scrollTo(0, 0);
 });
@@ -407,7 +409,6 @@ $("#body").addEventListener("click", e => {
   if (e.target.closest("#foldCart")) { S.openCart = !S.openCart; render(); return; }
   if (e.target.closest("#aisleBtn")) { openAisleSheet(); return; }
   if (e.target.closest("[data-newcat]")) { const v = S.cq; S.cq = ""; $("#catInput").value = ""; createItem(v); return; }
-  const card = e.target.closest("[data-card]"); if (card) { openScan(card.dataset.card); return; }
   const chip = e.target.closest("[data-chip]"); if (chip) { toggleCatalog(S.items.get(chip.dataset.chip)); return; }
   const btn = e.target.closest("[data-act]"); if (!btn) return;
   const id = btn.closest("[data-id]").dataset.id, it = S.items.get(id); if (!it) return;
@@ -603,6 +604,138 @@ function inferFormat(code, isQr, known){
 }
 function groupDigits(s){ return /^\d{13}$/.test(s) ? `${s[0]} ${s.slice(1, 7)} ${s.slice(7)}` : /^\d{12}$/.test(s) ? `${s.slice(0, 6)} ${s.slice(6)}` : s; }
 
+/* ---------- wallet (cards tab) ---------- */
+// Collapsed: a neat pile. Tap → cards spread so each one's top band shows.
+// Spread: tap a card to show its code; press and hold to drag it to a new place.
+let wdrag = null, pendingRender = false, walletSettling = false;
+S.walletOpen = false;
+const autoColors = new Map();
+const walletCards = () => [...S.cards.values()].sort((a, b) => (a.sort ?? 99) - (b.sort ?? 99) || a.name.localeCompare(b.name));
+function hexLum(hex){
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || ""); if (!m) return 0.5;
+  const n = parseInt(m[1], 16), c = [n >> 16, (n >> 8) & 255, n & 255].map(v => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); });
+  return .2126 * c[0] + .7152 * c[1] + .0722 * c[2];
+}
+function cardColor(c){
+  if (c.color) return c.color;
+  if (autoColors.has(c.id)) return autoColors.get(c.id) || "#8E8E93";
+  autoColors.set(c.id, null);
+  if (c.photo) colorFromPhoto(c.photo).then(col => { autoColors.set(c.id, col); if (S.tab === "cartoes") render(); });
+  return "#8E8E93";
+}
+// The card's main color: the most common saturated hue in the photo (ignores white, black and greys).
+function colorFromPhoto(src){
+  return new Promise(res => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const N = 48, cv = document.createElement("canvas"); cv.width = N; cv.height = N;
+        const cx = cv.getContext("2d"); cx.drawImage(img, 0, 0, N, N);
+        const d = cx.getImageData(0, 0, N, N).data, buckets = new Map();
+        for (let i = 0; i < d.length; i += 4){
+          const r = d[i], g = d[i + 1], b = d[i + 2], mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 510, sat = mx === mn ? 0 : (mx - mn) / (255 - Math.abs(mx + mn - 255));
+          if (sat < .35 || l < .12 || l > .9) continue;
+          let h; if (mx === r) h = ((g - b) / (mx - mn) + 6) % 6; else if (mx === g) h = (b - r) / (mx - mn) + 2; else h = (r - g) / (mx - mn) + 4;
+          const k = Math.round(h * 4) % 24, e = buckets.get(k) || { n: 0, r: 0, g: 0, b: 0 };
+          e.n++; e.r += r; e.g += g; e.b += b; buckets.set(k, e);
+        }
+        let best = null; for (const e of buckets.values()) if (!best || e.n > best.n) best = e;
+        if (!best || best.n < 20) return res(null);
+        const hx = v => Math.round(v / best.n).toString(16).padStart(2, "0");
+        res("#" + hx(best.r) + hx(best.g) + hx(best.b));
+      } catch(e){ res(null); }
+    };
+    img.onerror = () => res(null); img.src = src;
+  });
+}
+function cardFace(c){
+  const col = cardColor(c), dark = hexLum(col) < .45;
+  return `<button class="wcard ${dark ? "" : "light"}" data-wcard="${c.id}" style="--c:${esc(col)}" aria-label="${esc(c.name)}">
+    ${c.logo ? `<img class="wlogo" src="${esc(c.logo)}" alt="">` : `<span class="wname">${esc(c.name)}</span>`}
+  </button>`;
+}
+function walletGeom(){
+  const w = $("#wallet"); if (!w) return null;
+  const width = w.clientWidth, h = Math.round(width / 1.586);
+  return { w, width, h, strip: Math.max(64, Math.round(h * 0.3)), pile: 12 };
+}
+function layoutWallet(animate){
+  const g = walletGeom(); if (!g) return;
+  const els = [...g.w.querySelectorAll(".wcard")], n = els.length;
+  g.w.classList.toggle("open", S.walletOpen);
+  g.w.classList.toggle("anim", !!animate);
+  els.forEach((el, i) => {
+    el.style.height = g.h + "px";
+    if (S.walletOpen){ el.style.transform = `translateY(${i * g.strip}px)`; el.style.zIndex = i + 1; }
+    else { el.style.transform = `translateY(${(n - 1 - i) * g.pile}px) scale(${1 - i * 0.045})`; el.style.zIndex = n - i; }
+  });
+  g.w.style.height = (S.walletOpen ? (n - 1) * g.strip + g.h : (n - 1) * g.pile + g.h) + "px";
+  const hint = $("#walletHint");
+  if (hint) hint.textContent = S.walletOpen ? "Toque num cartão para mostrar o código. Segure e arraste para mudar a ordem." : "Toque para abrir os cartões.";
+}
+window.addEventListener("resize", () => { if (S.tab === "cartoes" && !wdrag) layoutWallet(false); });
+
+(function(){
+  const body = $("#body");
+  let press = null;
+  body.addEventListener("pointerdown", e => {
+    const el = e.target.closest(".wcard"); if (!el) return;
+    press = { el, id: el.dataset.wcard, x: e.clientX, y: e.clientY, pid: e.pointerId, moved: false, timer: null };
+    if (S.walletOpen) press.timer = setTimeout(() => startDrag(e), 320);
+  });
+  body.addEventListener("pointermove", e => {
+    if (wdrag && e.pointerId === wdrag.pid) { e.preventDefault(); moveDrag(e.clientY); return; }
+    if (press && e.pointerId === press.pid && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 8) { press.moved = true; clearTimeout(press.timer); }
+  });
+  const up = e => {
+    if (wdrag && e.pointerId === wdrag.pid) { endDrag(); press = null; return; }
+    if (!press || e.pointerId !== press.pid) return;
+    clearTimeout(press.timer);
+    const p = press; press = null;
+    if (p.moved || e.type === "pointercancel") return;
+    if (!S.walletOpen) { S.walletOpen = true; layoutWallet(true); haptic(); }
+    else openScan(p.id);
+  };
+  body.addEventListener("pointerup", up); body.addEventListener("pointercancel", up);
+  // While dragging, stop the page from scrolling (iOS needs a non-passive touchmove).
+  document.addEventListener("touchmove", e => { if (wdrag) e.preventDefault(); }, { passive: false });
+  body.addEventListener("contextmenu", e => { if (e.target.closest(".wcard")) e.preventDefault(); });
+
+  function startDrag(e){
+    if (!press || press.moved) return;
+    const g = walletGeom(); if (!g) return;
+    const els = [...g.w.querySelectorAll(".wcard")];
+    const from = els.indexOf(press.el);
+    wdrag = { pid: press.pid, el: press.el, startY: press.y, from, to: from, g, order: els.map(x => x.dataset.wcard) };
+    press.moved = true; // the release is a drop, not a tap
+    g.w.classList.add("anim", "sorting"); press.el.classList.add("lifted");
+    haptic();
+  }
+  function moveDrag(y){
+    const d = wdrag, g = d.g, n = d.order.length;
+    const dy = y - d.startY;
+    d.el.style.transform = `translateY(${d.from * g.strip + dy}px) scale(1.04)`;
+    const to = Math.max(0, Math.min(n - 1, Math.round((d.from * g.strip + dy) / g.strip)));
+    if (to !== d.to){
+      d.to = to; haptic();
+      const rest = d.order.filter(id => id !== d.el.dataset.wcard); rest.splice(to, 0, d.el.dataset.wcard);
+      rest.forEach((id, i) => { if (id === d.el.dataset.wcard) return; const el = g.w.querySelector(`[data-wcard="${id}"]`); el.style.transform = `translateY(${i * g.strip}px)`; el.style.zIndex = i + 1; });
+      d.el.style.zIndex = n + 5;
+    }
+  }
+  function endDrag(){
+    const d = wdrag; wdrag = null;
+    const order = d.order.filter(id => id !== d.el.dataset.wcard); order.splice(d.to, 0, d.el.dataset.wcard);
+    d.el.classList.remove("lifted"); d.g.w.classList.remove("sorting");
+    // Move the DOM to the new order, then settle into place.
+    order.forEach(id => d.g.w.appendChild(d.g.w.querySelector(`[data-wcard="${id}"]`)));
+    layoutWallet(true);
+    if (d.to !== d.from) order.forEach((id, i) => { const c = S.cards.get(id); if (c && c.sort !== i + 1) queueWrite("cards", id, { sort: i + 1 }, false); });
+    walletSettling = true;
+    setTimeout(() => { walletSettling = false; if (pendingRender) { pendingRender = false; render(); } }, 480);
+  }
+})();
+
 let scanEl = null, wake = null;
 async function openScan(id){
   const c = S.cards.get(id); if (!c) return;
@@ -662,12 +795,88 @@ function photoDataUrl(img){
   return cv.toDataURL("image/jpeg", 0.8);
 }
 
+// Makes the logo's photo background transparent: the colour along the edges of the
+// crop is taken as background and everything close to it fades out.
+function knockOutBackground(cv){
+  try {
+    const cx = cv.getContext("2d"), W = cv.width, H = cv.height, im = cx.getImageData(0, 0, W, H), d = im.data;
+    const edge = [];
+    for (let x = 0; x < W; x++) { edge.push((0 * W + x) * 4, ((H - 1) * W + x) * 4); }
+    for (let y = 0; y < H; y++) { edge.push((y * W) * 4, (y * W + W - 1) * 4); }
+    const med = k => { const v = edge.map(i => d[i + k]).sort((a, b) => a - b); return v[v.length >> 1]; };
+    const bg = [med(0), med(1), med(2)];
+    let spread = 0; for (const i of edge) spread += Math.hypot(d[i] - bg[0], d[i + 1] - bg[1], d[i + 2] - bg[2]);
+    spread /= edge.length;
+    const lo = Math.max(28, spread * 1.6), hi = lo + 60;
+    let kept = 0;
+    for (let i = 0; i < d.length; i += 4){
+      const dist = Math.hypot(d[i] - bg[0], d[i + 1] - bg[1], d[i + 2] - bg[2]);
+      const a = dist <= lo ? 0 : dist >= hi ? 1 : (dist - lo) / (hi - lo);
+      d[i + 3] = Math.round(d[i + 3] * a); if (a > .5) kept++;
+    }
+    // If what's left is mostly white (typical for logos on a coloured card), keep only the white parts.
+    let light = 0, n = 0;
+    for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 128) { if ((0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255 > .7) light++; n++; }
+    if (n && light / n > 0.4){
+      kept = 0;
+      for (let i = 0; i < d.length; i += 4){
+        const l = (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255;
+        const a = l <= .55 ? 0 : l >= .75 ? 1 : (l - .55) / .2;
+        d[i + 3] = Math.round(d[i + 3] * a); if (d[i + 3] > 128) kept++;
+      }
+    }
+    const share = kept / (W * H);
+    if (share > 0.02 && share < 0.9) cx.putImageData(im, 0, 0); // only when it clearly separated a logo
+  } catch(e){}
+}
+
+// Full-screen crop: drag a box around the logo on your own card photo.
+function cropLogo(photo){
+  return new Promise(resolve => {
+    if (!photo) return resolve(null);
+    const ov = document.createElement("div"); ov.className = "crop";
+    ov.innerHTML = `<div class="crop-bar"><button data-c="cancel">Cancelar</button><b>Marque o logo</b><button data-c="ok" class="b" disabled>Usar</button></div>
+      <div class="crop-stage"><div class="crop-img"><img src="${esc(photo)}" alt="" draggable="false"><div class="crop-box" hidden></div></div></div>
+      <p class="crop-tip">Arraste o dedo em volta do logo.</p>`;
+    document.body.appendChild(ov);
+    const wrap = $(".crop-img", ov), img = $("img", ov), box = $(".crop-box", ov), ok = $('[data-c="ok"]', ov);
+    let start = null, rect = null;
+    const pos = e => { const r = wrap.getBoundingClientRect(); return { x: Math.max(0, Math.min(r.width, e.clientX - r.left)), y: Math.max(0, Math.min(r.height, e.clientY - r.top)), w: r.width, h: r.height }; };
+    wrap.addEventListener("pointerdown", e => { e.preventDefault(); start = pos(e); try { wrap.setPointerCapture(e.pointerId); } catch(_){} });
+    wrap.addEventListener("pointermove", e => {
+      if (!start) return; e.preventDefault();
+      const p = pos(e); rect = { x: Math.min(start.x, p.x), y: Math.min(start.y, p.y), w: Math.abs(p.x - start.x), h: Math.abs(p.y - start.y), W: p.w, H: p.h };
+      Object.assign(box.style, { left: rect.x + "px", top: rect.y + "px", width: rect.w + "px", height: rect.h + "px" }); box.hidden = false;
+      ok.disabled = rect.w < 12 || rect.h < 8;
+    });
+    wrap.addEventListener("pointerup", () => { start = null; });
+    const finish = v => { ov.remove(); resolve(v); };
+    ov.addEventListener("click", e => {
+      const b = e.target.closest("[data-c]"); if (!b) return;
+      if (b.dataset.c === "cancel" || !rect) return finish(null);
+      const sx = img.naturalWidth / rect.W, sy = img.naturalHeight / rect.H;
+      const cw = Math.round(rect.w * sx), ch = Math.round(rect.h * sy), k = Math.min(1, 600 / cw);
+      const cv = document.createElement("canvas"); cv.width = Math.round(cw * k); cv.height = Math.round(ch * k);
+      cv.getContext("2d").drawImage(img, rect.x * sx, rect.y * sy, cw, ch, 0, 0, cv.width, cv.height);
+      knockOutBackground(cv);
+      finish(cv.toDataURL("image/png"));
+    });
+  });
+}
+
 function openCardSheet(id){
   const c = id ? S.cards.get(id) : null;
-  const draft = { name: c?.name || "", code: c?.code || "", format: c?.format || null, display: c?.display || "", photo: c?.photo || null };
+  const draft = { name: c?.name || "", code: c?.code || "", format: c?.format || null, display: c?.display || "", photo: c?.photo || null, color: c?.color || null, logo: c?.logo || null, auto: null };
   openSheet(`<h3>${c ? "Editar cartão" : "Novo cartão"}</h3>
     <div class="group"><button id="pickPhoto">${c ? "Trocar a foto" : "Tirar foto ou escolher imagem"}</button></div>
     <p class="foot-note" id="cStatus">${c ? "" : "Fotografe o cartão de frente, com o código bem visível. O app lê o código sozinho."}</p>
+    <div class="cface" id="cFace"></div>
+    <div class="group">
+      <label class="colrow"><span class="k">Cor do cartão</span><span class="colctl"><button type="button" class="linkish" id="cColorAuto">Automática</button><input type="color" id="cColor" aria-label="Escolher cor"></span></label>
+      <button type="button" id="cLogoPick">Escolher o logo na foto</button>
+      <button type="button" class="red" id="cLogoDel" hidden>Remover logo</button>
+    </div>
+    <p class="foot-note">O logo é recortado da foto do seu cartão: arraste o dedo em volta dele.</p>
     <div class="preview" id="cPrev" hidden></div>
     <div class="group">
       <label><span class="k">Nome</span><input type="text" id="cName" placeholder="Delhaize" value="${esc(draft.name)}"></label>
@@ -676,7 +885,26 @@ function openCardSheet(id){
       <label><span class="k">Número impresso</span><input type="text" id="cDisp" placeholder="Opcional" value="${esc(draft.display)}"></label>
     </div>
     <div class="acts"><button class="btn primary" id="cSave">Salvar</button><button class="btn gray" data-close>Cancelar</button></div>
+    <div class="photo-row" id="cPhotoRow" ${draft.photo ? "" : "hidden"}><img id="cPhotoImg" src="${esc(draft.photo || "")}" alt="Foto original do cartão"><span>Foto original do cartão</span></div>
     ${c ? `<div class="group"><button class="red" id="cDel">Apagar cartão</button></div>` : ""}`, el => {
+    const effColor = () => draft.color || draft.auto || "#8E8E93";
+    const face = () => {
+      $("#cFace", el).innerHTML = cardFace({ id: "_draft", name: $("#cName", el).value.trim() || "Cartão", color: effColor(), logo: draft.logo });
+      $("#cColor", el).value = /^#[0-9a-f]{6}$/i.test(effColor()) ? effColor() : "#8E8E93";
+      $("#cColorAuto", el).classList.toggle("on", !draft.color);
+      $("#cLogoDel", el).hidden = !draft.logo;
+      $("#cLogoPick", el).disabled = !draft.photo;
+      $("#cLogoPick", el).textContent = draft.logo ? "Escolher outro logo na foto" : "Escolher o logo na foto";
+      const pr = $("#cPhotoRow", el); pr.hidden = !draft.photo; if (draft.photo) $("#cPhotoImg", el).src = draft.photo;
+    };
+    const refreshAuto = () => { draft.auto = null; face(); if (draft.photo) colorFromPhoto(draft.photo).then(col => { draft.auto = col; face(); }); };
+    refreshAuto();
+    $("#cName", el).addEventListener("input", face);
+    $("#cColor", el).addEventListener("input", e => { draft.color = e.target.value; face(); });
+    $("#cColorAuto", el).addEventListener("click", () => { draft.color = null; face(); });
+    $("#cLogoPick", el).addEventListener("click", async () => { const logo = await cropLogo(draft.photo); if (logo) { draft.logo = logo; face(); } });
+    $("#cLogoDel", el).addEventListener("click", () => { draft.logo = null; face(); });
+    $("#cPhotoImg", el).addEventListener("click", () => { const v = document.createElement("div"); v.className = "photo-view"; v.innerHTML = `<img src="${esc(draft.photo)}" alt="">`; v.onclick = () => v.remove(); document.body.appendChild(v); });
     const setStatus = (t, cls = "") => { const s = $("#cStatus", el); s.textContent = t; s.className = "foot-note " + cls; };
     const prev = () => {
       draft.code = $("#cCode", el).value.trim();
@@ -695,7 +923,7 @@ function openCardSheet(id){
         setStatus("Lendo o código…");
         try {
           const img = await loadImage(file);
-          draft.photo = photoDataUrl(img);
+          draft.photo = photoDataUrl(img); refreshAuto();
           const r = await decodeImage(img);
           if (r){
             $("#cCode", el).value = r.code; $("#cQr", el).checked = r.format === "QR";
@@ -714,7 +942,8 @@ function openCardSheet(id){
       if (!name) { $("#cName", el).focus(); setStatus("Dê um nome ao cartão.", "warn"); return; }
       if (!draft.code) { $("#cCode", el).focus(); setStatus("Falta o código. Tire uma foto ou digite os números.", "warn"); return; }
       const cid = id || newId("c");
-      queueWrite("cards", cid, { name, code: draft.code, format: draft.format, display: draft.display, photo: draft.photo, sort: c?.sort ?? (S.cards.size + 1) }, !c);
+      queueWrite("cards", cid, { name, code: draft.code, format: draft.format, display: draft.display, photo: draft.photo, color: draft.color, logo: draft.logo, sort: c?.sort ?? (S.cards.size + 1) }, !c);
+      autoColors.delete(cid);
       closeSheet(); toast(c ? "Cartão atualizado" : "Cartão salvo");
     });
     $("#cDel", el)?.addEventListener("click", e => {
@@ -850,7 +1079,7 @@ $("#bell").addEventListener("click", openNotifySheet);
 
 /* ---------- new version banner ---------- */
 // Bump APP_VERSION here and in version.json on every release.
-const APP_VERSION = "2026-10-21.1";
+const APP_VERSION = "2026-10-23.1";
 let updateShown = false;
 async function checkVersion(){
   if (updateShown || document.hidden || location.protocol === "file:") return;

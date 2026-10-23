@@ -208,6 +208,52 @@ nav.tabs button[aria-selected="true"]{color:var(--accent)}
 .row.leaving .row-fg{transform:translateX(14px);transition:transform .28s ease}
 .finish.bump{animation:bump .35s cubic-bezier(.3,1.6,.5,1)}
 @keyframes bump{40%{transform:scale(1.08)}100%{transform:scale(1)}}
+/* wallet */
+.wallet{position:relative;margin-top:10px;touch-action:pan-y;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.wallet .wcard{position:absolute;left:0;right:0;top:0;transform-origin:50% 0;will-change:transform}
+.wallet.anim .wcard{transition:transform .5s cubic-bezier(.2,.9,.25,1.08),box-shadow .25s}
+.wallet.anim{transition:height .5s cubic-bezier(.2,.9,.25,1)}
+.wallet.sorting .wcard.lifted{transition:box-shadow .2s,transform 0s}
+.wcard{display:block;width:100%;border-radius:16px;overflow:hidden;text-align:left;color:#FFFFFF;
+  background:
+    radial-gradient(120% 95% at 0% 0%, rgba(255,255,255,.30), rgba(255,255,255,0) 55%),
+    radial-gradient(90% 80% at 100% 110%, rgba(0,0,0,.28), rgba(0,0,0,0) 60%),
+    linear-gradient(118deg, rgba(255,255,255,0) 58%, rgba(255,255,255,.16) 58.3%, rgba(255,255,255,0) 58.9%),
+    linear-gradient(118deg, rgba(255,255,255,0) 66%, rgba(255,255,255,.10) 66.3%, rgba(255,255,255,0) 66.8%),
+    repeating-linear-gradient(118deg, rgba(255,255,255,.045) 0 1px, rgba(255,255,255,0) 1px 9px),
+    var(--c);
+  box-shadow:0 1px 0 rgba(255,255,255,.25) inset,0 0 0 .5px rgba(0,0,0,.12),0 8px 22px rgba(0,0,0,.16)}
+.wcard::after{content:"";position:absolute;inset:0;background:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .55 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");opacity:.13;mix-blend-mode:overlay;pointer-events:none}
+.wcard.light{color:#1C1C1E}
+.wcard.lifted{box-shadow:0 1px 0 rgba(255,255,255,.25) inset,0 18px 40px rgba(0,0,0,.32)}
+.wlogo{position:absolute;left:18px;top:16px;max-height:36px;max-width:55%;object-fit:contain;border-radius:4px}
+.wname{position:absolute;left:18px;top:16px;right:18px;font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:-.01em;line-height:1.15;text-shadow:0 1px 1px rgba(0,0,0,.12);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wcard.light .wname{text-shadow:none}
+.wallet-hint{text-align:center;margin-top:16px}
+.cface .wcard{position:relative;aspect-ratio:1.586}
+.colrow{justify-content:space-between}
+.colctl{display:flex;align-items:center;gap:12px}
+.colctl input[type=color]{width:34px;height:34px;padding:0;border:0;border-radius:50%;background:none;overflow:hidden;flex:none}
+.colctl input[type=color]::-webkit-color-swatch-wrapper{padding:0}
+.colctl input[type=color]::-webkit-color-swatch{border:1px solid rgba(0,0,0,.12);border-radius:50%}
+.linkish{color:var(--blue);font-size:15px}
+.linkish.on{color:var(--muted)}
+.group > button:disabled{color:#C7C7CC}
+.photo-row{display:flex;align-items:center;gap:12px;background:var(--bg);border-radius:12px;padding:10px 14px}
+.photo-row img{width:76px;aspect-ratio:1.586;object-fit:cover;border-radius:8px;cursor:zoom-in}
+.photo-row span{color:var(--ink2);font-size:15px}
+.photo-view{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.85);display:grid;place-items:center;padding:20px}
+.photo-view img{max-width:100%;max-height:100%;border-radius:12px}
+.crop{position:fixed;inset:0;z-index:60;background:#000;color:#FFF;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.crop-bar{display:flex;align-items:center;justify-content:space-between;padding:10px max(16px,env(safe-area-inset-left,0px))}
+.crop-bar button{color:#FFB340;font-size:17px;padding:8px 2px}
+.crop-bar button.b{font-weight:600}
+.crop-bar button:disabled{color:#666}
+.crop-stage{flex:1;display:grid;place-items:center;padding:16px;min-height:0}
+.crop-img{position:relative;touch-action:none;max-width:100%}
+.crop-img img{display:block;max-width:100%;max-height:70vh;-webkit-user-select:none;user-select:none}
+.crop-box{position:absolute;border:2px solid #FFB340;border-radius:6px;box-shadow:0 0 0 9999px rgba(0,0,0,.55)}
+.crop-tip{text-align:center;color:#AAA;font-size:15px;margin:0 0 18px}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>

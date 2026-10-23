@@ -65,3 +65,7 @@ Shortcut (Shortcuts app → +):
 2. **Get Contents of URL** — the URL above; Method **POST**; Request Body **JSON**; fields `item` = *Provided Input*, `by` = your name (exactly as typed in the bell settings).
 3. **Show Result** — *Contents of URL*.
 Name it "Adicionar na Lista".
+
+## Wallet (Cartões)
+
+Run `supabase/6-card-design.sql` once (adds `color` and `logo` to cards). Cards show their main colour (picked from the photo, or chosen in the card's settings) with a light texture, and the logo you mark on the photo in **Editar → Escolher o logo na foto**. Tap the pile to spread the cards, press and hold to drag them into a new order, tap a card to show its code.
