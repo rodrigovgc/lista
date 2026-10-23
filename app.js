@@ -231,8 +231,10 @@ function render(){
     if ($("#catInput")) $("#catInput").value = S.cq;
   }
   if ($("#sugHost")) $("#sugHost").innerHTML = sugMenu();
-  $("#body").innerHTML = S.tab === "lista" ? viewLista(list, cart, next) : S.tab === "catalogo" ? viewCatalogo() : viewCartoes();
-  if (S.tab === "cartoes") { layoutWallet(false); if (!S.walletOpen) spreadWallet(); }
+  if (!(S.tab === "cartoes" && patchWallet())){
+    $("#body").innerHTML = S.tab === "lista" ? viewLista(list, cart, next) : S.tab === "catalogo" ? viewCatalogo() : viewCartoes();
+    if (S.tab === "cartoes") { layoutWallet(false); if (!S.walletOpen) spreadWallet(); }
+  }
   const fin = $("#finish");
   if (S.tab === "lista" && (cart.length || next.length)){
     fin.hidden = false;
@@ -357,7 +359,7 @@ function viewCartoes(){
   const cards = walletCards();
   if (!cards.length) return `<div class="empty"><strong>Nenhum cartão</strong>Toque em + e tire uma foto do cartão do mercado.</div>`;
   return `<div class="wallet ${S.walletOpen ? "open" : ""}" id="wallet">${cards.map(c => cardFace(c)).join("")}</div>
-    <p class="hint wallet-hint" id="walletHint"></p>`;
+    <p class="hint wallet-hint">Toque num cartão para ver o código.</p>`;
 }
 function setupNotice(){
   return `<div class="empty"><strong>Falta conectar o Supabase</strong>Abra o arquivo config.js e cole a URL e a chave “anon” do seu projeto Supabase.</div>`;
@@ -369,7 +371,7 @@ document.querySelector("nav.tabs").addEventListener("click", e => {
   if (S.tab === b.dataset.tab) { window.scrollTo({ top: 0, behavior: "smooth" }); return; }
   S.walletOpen = false; // the cards fan out again next time the tab opens
   S.tab = b.dataset.tab; S.q = ""; S.sugIdx = -1; LS.set("lista.tab", S.tab);
-  render(); window.scrollTo(0, 0);
+  swapScreen(() => { render(); window.scrollTo(0, 0); });
 });
 $("#fab").addEventListener("click", () => {
   if (S.tab === "cartoes") { openCardSheet(null); return; }
@@ -605,12 +607,25 @@ function inferFormat(code, isQr, known){
 }
 function groupDigits(s){ return /^\d{13}$/.test(s) ? `${s[0]} ${s.slice(1, 7)} ${s.slice(7)}` : /^\d{12}$/.test(s) ? `${s.slice(0, 6)} ${s.slice(6)}` : s; }
 
+/* ---------- screen changes ---------- */
+// Tabs change through the browser's built-in cross-fade: the old screen stays fully
+// visible and blends into the new one, so there is never an empty frame (no blink).
+let screenFade = null;
+function swapScreen(update){
+  if (!document.startViewTransition || reduceMotion()) { update(); return; }
+  try {
+    const vt = document.startViewTransition(update);
+    screenFade = vt.finished.catch(() => {}).then(() => { screenFade = null; });
+  } catch(e){ update(); }
+}
+
 /* ---------- wallet (cards tab) ---------- */
 // Collapsed: a neat pile. Tap → cards spread so each one's top band shows.
 // Spread: tap a card to show its code; press and hold to drag it to a new place.
 let wdrag = null, pendingRender = false, walletSettling = false;
 S.walletOpen = false;
-const autoColors = new Map();
+const autoColors = new Map(Object.entries(LS.get("lista.autoColors", {})));
+const saveAutoColors = () => LS.set("lista.autoColors", Object.fromEntries([...autoColors].filter(([, v]) => v)));
 const walletCards = () => [...S.cards.values()].sort((a, b) => (a.sort ?? 99) - (b.sort ?? 99) || a.name.localeCompare(b.name));
 function hexLum(hex){
   const m = /^#?([0-9a-f]{6})$/i.exec(hex || ""); if (!m) return 0.5;
@@ -621,7 +636,7 @@ function cardColor(c){
   if (c.color) return c.color;
   if (autoColors.has(c.id)) return autoColors.get(c.id) || "#8E8E93";
   autoColors.set(c.id, null);
-  if (c.photo) colorFromPhoto(c.photo).then(col => { autoColors.set(c.id, col); if (S.tab === "cartoes") render(); });
+  if (c.photo) colorFromPhoto(c.photo).then(col => { autoColors.set(c.id, col); saveAutoColors(); if (S.tab === "cartoes") patchWallet(); });
   return "#8E8E93";
 }
 // The card's main color: the most common saturated hue in the photo (ignores white, black and greys).
@@ -664,12 +679,25 @@ function cardPaint(c){
   const base = cardColor(c);
   if (!/^#[0-9a-f]{6}$/i.test(base)) return { c1: base, c2: base, dark: true };
   let [h, s, l] = hexToHsl(base);
-  if (!c.color && s > .15){ s = Math.min(1, s * 1.25 + .12); l = Math.max(.36, Math.min(.5, l)); }
-  return { c1: hsl(h - 6, s, l + .08), c2: hsl(h + 8, Math.min(1, s + .05), l - .12), dark: l < .62 };
+  if (!c.color && s > .15){ s = Math.min(1, s * 1.2 + .1); l = Math.max(.34, Math.min(.46, l)); }
+  return { c1: hsl(h - 4, s, l), c2: hsl(h + 8, Math.min(1, s + .05), l - .13), dark: l < .62 };
 }
 function cardFace(c){
   const p = cardPaint(c);
   return `<button class="wcard ${p.dark ? "" : "light"}" data-wcard="${c.id}" style="--c1:${p.c1};--c2:${p.c2}" aria-label="${esc(c.name)}"><span class="wname">${esc(c.name)}</span></button>`;
+}
+// Same cards in the same order: just refresh colours and names, keep the DOM (and any animation) as is.
+function patchWallet(){
+  const w = $("#wallet"); if (!w) return false;
+  const cards = walletCards(), els = [...w.querySelectorAll(".wcard")];
+  if (els.map(e => e.dataset.wcard).join() !== cards.map(c => c.id).join()) return false;
+  cards.forEach((c, i) => {
+    const el = els[i], p = cardPaint(c);
+    el.style.setProperty("--c1", p.c1); el.style.setProperty("--c2", p.c2);
+    el.classList.toggle("light", !p.dark); el.setAttribute("aria-label", c.name);
+    const nm = el.querySelector(".wname"); if (nm.textContent !== c.name) nm.textContent = c.name;
+  });
+  return true;
 }
 function walletGeom(){
   const w = $("#wallet"); if (!w) return null;
@@ -684,25 +712,25 @@ function layoutWallet(animate, cascade){
   g.w.classList.toggle("entering", !!cascade);
   els.forEach((el, i) => {
     el.style.height = g.h + "px"; el.style.zIndex = i + 1;
-    el.style.transitionDelay = cascade ? (i * 70) + "ms" : "";
-    if (S.walletOpen) el.style.transform = `translateY(${i * g.strip}px)`;
-    else el.style.transform = `translateY(${i * g.pile}px) scale(${1 - (n - 1 - i) * 0.04})`;
+    el.style.transitionDelay = cascade ? (i * 90) + "ms" : "";
+    if (S.walletOpen) el.style.transform = `translate3d(0,${i * g.strip}px,0)`;
+    else el.style.transform = `translate3d(0,${i * g.pile}px,0) scale(${1 - (n - 1 - i) * 0.04})`;
   });
   g.w.style.height = (S.walletOpen ? (n - 1) * g.strip + g.h : (n - 1) * g.pile + g.h) + "px";
-  if (cascade) setTimeout(() => { els.forEach(el => el.style.transitionDelay = ""); g.w.classList.remove("entering"); }, 900 + n * 70);
-  const hint = $("#walletHint");
-  if (hint) hint.textContent = "Toque num cartão para mostrar o código. Segure e arraste para mudar a ordem.";
+  if (cascade) setTimeout(() => { els.forEach(el => el.style.transitionDelay = ""); g.w.classList.remove("entering"); }, 1100 + n * 90);
 }
 // Every time the Cartões tab opens: the pile appears, then fans out in a cascade.
 let spreadTimer = null;
 function spreadWallet(){
   clearTimeout(spreadTimer);
-  spreadTimer = setTimeout(() => {
+  const go = () => {
     if (S.tab !== "cartoes" || S.walletOpen || !$("#wallet")) return;
     S.walletOpen = true;
     if (reduceMotion()) return layoutWallet(false);
-    layoutWallet(true, true);
-  }, 140);
+    requestAnimationFrame(() => layoutWallet(true, true));
+  };
+  // The cross-fade shows the new screen live, so the cards can start fanning out right away.
+  spreadTimer = setTimeout(go, 90);
 }
 window.addEventListener("resize", () => { if (S.tab === "cartoes" && !wdrag) layoutWallet(false); });
 
@@ -745,12 +773,12 @@ window.addEventListener("resize", () => { if (S.tab === "cartoes" && !wdrag) lay
   function moveDrag(y){
     const d = wdrag, g = d.g, n = d.order.length;
     const dy = y - d.startY;
-    d.el.style.transform = `translateY(${d.from * g.strip + dy}px) scale(1.04)`;
+    d.el.style.transform = `translate3d(0,${d.from * g.strip + dy}px,0) scale(1.04)`;
     const to = Math.max(0, Math.min(n - 1, Math.round((d.from * g.strip + dy) / g.strip)));
     if (to !== d.to){
       d.to = to; haptic();
       const rest = d.order.filter(id => id !== d.el.dataset.wcard); rest.splice(to, 0, d.el.dataset.wcard);
-      rest.forEach((id, i) => { if (id === d.el.dataset.wcard) return; const el = g.w.querySelector(`[data-wcard="${id}"]`); el.style.transform = `translateY(${i * g.strip}px)`; el.style.zIndex = i + 1; });
+      rest.forEach((id, i) => { if (id === d.el.dataset.wcard) return; const el = g.w.querySelector(`[data-wcard="${id}"]`); el.style.transform = `translate3d(0,${i * g.strip}px,0)`; el.style.zIndex = i + 1; });
       d.el.style.zIndex = n + 5;
     }
   }
@@ -897,7 +925,7 @@ function openCardSheet(id){
       if (!draft.code) { $("#cCode", el).focus(); setStatus("Falta o código. Tire uma foto ou digite os números.", "warn"); return; }
       const cid = id || newId("c");
       queueWrite("cards", cid, { name, code: draft.code, format: draft.format, display: draft.display, photo: draft.photo, color: draft.color, sort: c?.sort ?? (S.cards.size + 1) }, !c);
-      autoColors.delete(cid);
+      autoColors.delete(cid); saveAutoColors();
       closeSheet(); toast(c ? "Cartão atualizado" : "Cartão salvo");
     });
     $("#cDel", el)?.addEventListener("click", e => {
@@ -1033,7 +1061,7 @@ $("#bell").addEventListener("click", openNotifySheet);
 
 /* ---------- new version banner ---------- */
 // Bump APP_VERSION here and in version.json on every release.
-const APP_VERSION = "2026-10-23.2";
+const APP_VERSION = "2026-10-23.3";
 let updateShown = false;
 async function checkVersion(){
   if (updateShown || document.hidden || location.protocol === "file:") return;
