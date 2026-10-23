@@ -68,4 +68,4 @@ Name it "Adicionar na Lista".
 
 ## Wallet (Cartões)
 
-Run `supabase/6-card-design.sql` once (adds `color` and `logo` to cards). Cards show their main colour (picked from the photo, or chosen in the card's settings) with a light texture, and the logo you mark on the photo in **Editar → Escolher o logo na foto**. Tap the pile to spread the cards, press and hold to drag them into a new order, tap a card to show its code.
+Run `supabase/6-card-design.sql` once (adds `color` and `logo` to cards). Cards show their main colour (picked from the photo, or chosen in the card's settings) with a light texture,. The cards fan out by themselves when the tab opens; press and hold to drag them into a new order, tap a card to show its code.

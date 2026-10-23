@@ -232,7 +232,7 @@ function render(){
   }
   if ($("#sugHost")) $("#sugHost").innerHTML = sugMenu();
   $("#body").innerHTML = S.tab === "lista" ? viewLista(list, cart, next) : S.tab === "catalogo" ? viewCatalogo() : viewCartoes();
-  if (S.tab === "cartoes") layoutWallet(false);
+  if (S.tab === "cartoes") { layoutWallet(false); if (!S.walletOpen) spreadWallet(); }
   const fin = $("#finish");
   if (S.tab === "lista" && (cart.length || next.length)){
     fin.hidden = false;
@@ -366,7 +366,8 @@ function setupNotice(){
 /* ---------- events ---------- */
 document.querySelector("nav.tabs").addEventListener("click", e => {
   const b = e.target.closest("button[data-tab]"); if (!b) return;
-  if (S.tab === b.dataset.tab) { if (S.tab === "cartoes" && S.walletOpen) { S.walletOpen = false; layoutWallet(true); } window.scrollTo({ top: 0, behavior: "smooth" }); return; }
+  if (S.tab === b.dataset.tab) { window.scrollTo({ top: 0, behavior: "smooth" }); return; }
+  S.walletOpen = false; // the cards fan out again next time the tab opens
   S.tab = b.dataset.tab; S.q = ""; S.sugIdx = -1; LS.set("lista.tab", S.tab);
   render(); window.scrollTo(0, 0);
 });
@@ -648,30 +649,60 @@ function colorFromPhoto(src){
     img.onerror = () => res(null); img.src = src;
   });
 }
+// Hex ⇄ HSL helpers for the card gradients.
+function hexToHsl(hex){
+  const n = parseInt(hex.slice(1), 16), r = (n >> 16) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2; let h = 0, s = 0;
+  if (mx !== mn){ const d = mx - mn; s = l > .5 ? d / (2 - mx - mn) : d / (mx + mn);
+    h = mx === r ? ((g - b) / d + (g < b ? 6 : 0)) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h *= 60; }
+  return [h, s, l];
+}
+function hsl(h, s, l){ return `hsl(${Math.round((h + 360) % 360)} ${Math.round(Math.max(0, Math.min(1, s)) * 100)}% ${Math.round(Math.max(0, Math.min(1, l)) * 100)}%)`; }
+// A rich two-tone gradient from the card's colour: brighter and slightly warmer at the top left,
+// deeper at the bottom right. Auto-picked colours get extra saturation so they don't look washed out.
+function cardPaint(c){
+  const base = cardColor(c);
+  if (!/^#[0-9a-f]{6}$/i.test(base)) return { c1: base, c2: base, dark: true };
+  let [h, s, l] = hexToHsl(base);
+  if (!c.color && s > .15){ s = Math.min(1, s * 1.25 + .12); l = Math.max(.36, Math.min(.5, l)); }
+  return { c1: hsl(h - 6, s, l + .08), c2: hsl(h + 8, Math.min(1, s + .05), l - .12), dark: l < .62 };
+}
 function cardFace(c){
-  const col = cardColor(c), dark = hexLum(col) < .45;
-  return `<button class="wcard ${dark ? "" : "light"}" data-wcard="${c.id}" style="--c:${esc(col)}" aria-label="${esc(c.name)}">
-    ${c.logo ? `<img class="wlogo" src="${esc(c.logo)}" alt="">` : `<span class="wname">${esc(c.name)}</span>`}
-  </button>`;
+  const p = cardPaint(c);
+  return `<button class="wcard ${p.dark ? "" : "light"}" data-wcard="${c.id}" style="--c1:${p.c1};--c2:${p.c2}" aria-label="${esc(c.name)}"><span class="wname">${esc(c.name)}</span></button>`;
 }
 function walletGeom(){
   const w = $("#wallet"); if (!w) return null;
   const width = w.clientWidth, h = Math.round(width / 1.586);
   return { w, width, h, strip: Math.max(64, Math.round(h * 0.3)), pile: 12 };
 }
-function layoutWallet(animate){
+function layoutWallet(animate, cascade){
   const g = walletGeom(); if (!g) return;
   const els = [...g.w.querySelectorAll(".wcard")], n = els.length;
   g.w.classList.toggle("open", S.walletOpen);
   g.w.classList.toggle("anim", !!animate);
+  g.w.classList.toggle("entering", !!cascade);
   els.forEach((el, i) => {
-    el.style.height = g.h + "px";
-    if (S.walletOpen){ el.style.transform = `translateY(${i * g.strip}px)`; el.style.zIndex = i + 1; }
-    else { el.style.transform = `translateY(${(n - 1 - i) * g.pile}px) scale(${1 - i * 0.045})`; el.style.zIndex = n - i; }
+    el.style.height = g.h + "px"; el.style.zIndex = i + 1;
+    el.style.transitionDelay = cascade ? (i * 70) + "ms" : "";
+    if (S.walletOpen) el.style.transform = `translateY(${i * g.strip}px)`;
+    else el.style.transform = `translateY(${i * g.pile}px) scale(${1 - (n - 1 - i) * 0.04})`;
   });
   g.w.style.height = (S.walletOpen ? (n - 1) * g.strip + g.h : (n - 1) * g.pile + g.h) + "px";
+  if (cascade) setTimeout(() => { els.forEach(el => el.style.transitionDelay = ""); g.w.classList.remove("entering"); }, 900 + n * 70);
   const hint = $("#walletHint");
-  if (hint) hint.textContent = S.walletOpen ? "Toque num cartão para mostrar o código. Segure e arraste para mudar a ordem." : "Toque para abrir os cartões.";
+  if (hint) hint.textContent = "Toque num cartão para mostrar o código. Segure e arraste para mudar a ordem.";
+}
+// Every time the Cartões tab opens: the pile appears, then fans out in a cascade.
+let spreadTimer = null;
+function spreadWallet(){
+  clearTimeout(spreadTimer);
+  spreadTimer = setTimeout(() => {
+    if (S.tab !== "cartoes" || S.walletOpen || !$("#wallet")) return;
+    S.walletOpen = true;
+    if (reduceMotion()) return layoutWallet(false);
+    layoutWallet(true, true);
+  }, 140);
 }
 window.addEventListener("resize", () => { if (S.tab === "cartoes" && !wdrag) layoutWallet(false); });
 
@@ -693,7 +724,7 @@ window.addEventListener("resize", () => { if (S.tab === "cartoes" && !wdrag) lay
     clearTimeout(press.timer);
     const p = press; press = null;
     if (p.moved || e.type === "pointercancel") return;
-    if (!S.walletOpen) { S.walletOpen = true; layoutWallet(true); haptic(); }
+    if (!S.walletOpen) { S.walletOpen = true; layoutWallet(true); }
     else openScan(p.id);
   };
   body.addEventListener("pointerup", up); body.addEventListener("pointercancel", up);
@@ -795,88 +826,16 @@ function photoDataUrl(img){
   return cv.toDataURL("image/jpeg", 0.8);
 }
 
-// Makes the logo's photo background transparent: the colour along the edges of the
-// crop is taken as background and everything close to it fades out.
-function knockOutBackground(cv){
-  try {
-    const cx = cv.getContext("2d"), W = cv.width, H = cv.height, im = cx.getImageData(0, 0, W, H), d = im.data;
-    const edge = [];
-    for (let x = 0; x < W; x++) { edge.push((0 * W + x) * 4, ((H - 1) * W + x) * 4); }
-    for (let y = 0; y < H; y++) { edge.push((y * W) * 4, (y * W + W - 1) * 4); }
-    const med = k => { const v = edge.map(i => d[i + k]).sort((a, b) => a - b); return v[v.length >> 1]; };
-    const bg = [med(0), med(1), med(2)];
-    let spread = 0; for (const i of edge) spread += Math.hypot(d[i] - bg[0], d[i + 1] - bg[1], d[i + 2] - bg[2]);
-    spread /= edge.length;
-    const lo = Math.max(28, spread * 1.6), hi = lo + 60;
-    let kept = 0;
-    for (let i = 0; i < d.length; i += 4){
-      const dist = Math.hypot(d[i] - bg[0], d[i + 1] - bg[1], d[i + 2] - bg[2]);
-      const a = dist <= lo ? 0 : dist >= hi ? 1 : (dist - lo) / (hi - lo);
-      d[i + 3] = Math.round(d[i + 3] * a); if (a > .5) kept++;
-    }
-    // If what's left is mostly white (typical for logos on a coloured card), keep only the white parts.
-    let light = 0, n = 0;
-    for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 128) { if ((0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255 > .7) light++; n++; }
-    if (n && light / n > 0.4){
-      kept = 0;
-      for (let i = 0; i < d.length; i += 4){
-        const l = (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255;
-        const a = l <= .55 ? 0 : l >= .75 ? 1 : (l - .55) / .2;
-        d[i + 3] = Math.round(d[i + 3] * a); if (d[i + 3] > 128) kept++;
-      }
-    }
-    const share = kept / (W * H);
-    if (share > 0.02 && share < 0.9) cx.putImageData(im, 0, 0); // only when it clearly separated a logo
-  } catch(e){}
-}
-
-// Full-screen crop: drag a box around the logo on your own card photo.
-function cropLogo(photo){
-  return new Promise(resolve => {
-    if (!photo) return resolve(null);
-    const ov = document.createElement("div"); ov.className = "crop";
-    ov.innerHTML = `<div class="crop-bar"><button data-c="cancel">Cancelar</button><b>Marque o logo</b><button data-c="ok" class="b" disabled>Usar</button></div>
-      <div class="crop-stage"><div class="crop-img"><img src="${esc(photo)}" alt="" draggable="false"><div class="crop-box" hidden></div></div></div>
-      <p class="crop-tip">Arraste o dedo em volta do logo.</p>`;
-    document.body.appendChild(ov);
-    const wrap = $(".crop-img", ov), img = $("img", ov), box = $(".crop-box", ov), ok = $('[data-c="ok"]', ov);
-    let start = null, rect = null;
-    const pos = e => { const r = wrap.getBoundingClientRect(); return { x: Math.max(0, Math.min(r.width, e.clientX - r.left)), y: Math.max(0, Math.min(r.height, e.clientY - r.top)), w: r.width, h: r.height }; };
-    wrap.addEventListener("pointerdown", e => { e.preventDefault(); start = pos(e); try { wrap.setPointerCapture(e.pointerId); } catch(_){} });
-    wrap.addEventListener("pointermove", e => {
-      if (!start) return; e.preventDefault();
-      const p = pos(e); rect = { x: Math.min(start.x, p.x), y: Math.min(start.y, p.y), w: Math.abs(p.x - start.x), h: Math.abs(p.y - start.y), W: p.w, H: p.h };
-      Object.assign(box.style, { left: rect.x + "px", top: rect.y + "px", width: rect.w + "px", height: rect.h + "px" }); box.hidden = false;
-      ok.disabled = rect.w < 12 || rect.h < 8;
-    });
-    wrap.addEventListener("pointerup", () => { start = null; });
-    const finish = v => { ov.remove(); resolve(v); };
-    ov.addEventListener("click", e => {
-      const b = e.target.closest("[data-c]"); if (!b) return;
-      if (b.dataset.c === "cancel" || !rect) return finish(null);
-      const sx = img.naturalWidth / rect.W, sy = img.naturalHeight / rect.H;
-      const cw = Math.round(rect.w * sx), ch = Math.round(rect.h * sy), k = Math.min(1, 600 / cw);
-      const cv = document.createElement("canvas"); cv.width = Math.round(cw * k); cv.height = Math.round(ch * k);
-      cv.getContext("2d").drawImage(img, rect.x * sx, rect.y * sy, cw, ch, 0, 0, cv.width, cv.height);
-      knockOutBackground(cv);
-      finish(cv.toDataURL("image/png"));
-    });
-  });
-}
-
 function openCardSheet(id){
   const c = id ? S.cards.get(id) : null;
-  const draft = { name: c?.name || "", code: c?.code || "", format: c?.format || null, display: c?.display || "", photo: c?.photo || null, color: c?.color || null, logo: c?.logo || null, auto: null };
+  const draft = { name: c?.name || "", code: c?.code || "", format: c?.format || null, display: c?.display || "", photo: c?.photo || null, color: c?.color || null, auto: null };
   openSheet(`<h3>${c ? "Editar cartão" : "Novo cartão"}</h3>
     <div class="group"><button id="pickPhoto">${c ? "Trocar a foto" : "Tirar foto ou escolher imagem"}</button></div>
     <p class="foot-note" id="cStatus">${c ? "" : "Fotografe o cartão de frente, com o código bem visível. O app lê o código sozinho."}</p>
     <div class="cface" id="cFace"></div>
     <div class="group">
       <label class="colrow"><span class="k">Cor do cartão</span><span class="colctl"><button type="button" class="linkish" id="cColorAuto">Automática</button><input type="color" id="cColor" aria-label="Escolher cor"></span></label>
-      <button type="button" id="cLogoPick">Escolher o logo na foto</button>
-      <button type="button" class="red" id="cLogoDel" hidden>Remover logo</button>
     </div>
-    <p class="foot-note">O logo é recortado da foto do seu cartão: arraste o dedo em volta dele.</p>
     <div class="preview" id="cPrev" hidden></div>
     <div class="group">
       <label><span class="k">Nome</span><input type="text" id="cName" placeholder="Delhaize" value="${esc(draft.name)}"></label>
@@ -889,12 +848,9 @@ function openCardSheet(id){
     ${c ? `<div class="group"><button class="red" id="cDel">Apagar cartão</button></div>` : ""}`, el => {
     const effColor = () => draft.color || draft.auto || "#8E8E93";
     const face = () => {
-      $("#cFace", el).innerHTML = cardFace({ id: "_draft", name: $("#cName", el).value.trim() || "Cartão", color: effColor(), logo: draft.logo });
+      $("#cFace", el).innerHTML = cardFace({ id: "_draft", name: $("#cName", el).value.trim() || "Cartão", color: draft.color || draft.auto || "#8E8E93" });
       $("#cColor", el).value = /^#[0-9a-f]{6}$/i.test(effColor()) ? effColor() : "#8E8E93";
       $("#cColorAuto", el).classList.toggle("on", !draft.color);
-      $("#cLogoDel", el).hidden = !draft.logo;
-      $("#cLogoPick", el).disabled = !draft.photo;
-      $("#cLogoPick", el).textContent = draft.logo ? "Escolher outro logo na foto" : "Escolher o logo na foto";
       const pr = $("#cPhotoRow", el); pr.hidden = !draft.photo; if (draft.photo) $("#cPhotoImg", el).src = draft.photo;
     };
     const refreshAuto = () => { draft.auto = null; face(); if (draft.photo) colorFromPhoto(draft.photo).then(col => { draft.auto = col; face(); }); };
@@ -902,8 +858,6 @@ function openCardSheet(id){
     $("#cName", el).addEventListener("input", face);
     $("#cColor", el).addEventListener("input", e => { draft.color = e.target.value; face(); });
     $("#cColorAuto", el).addEventListener("click", () => { draft.color = null; face(); });
-    $("#cLogoPick", el).addEventListener("click", async () => { const logo = await cropLogo(draft.photo); if (logo) { draft.logo = logo; face(); } });
-    $("#cLogoDel", el).addEventListener("click", () => { draft.logo = null; face(); });
     $("#cPhotoImg", el).addEventListener("click", () => { const v = document.createElement("div"); v.className = "photo-view"; v.innerHTML = `<img src="${esc(draft.photo)}" alt="">`; v.onclick = () => v.remove(); document.body.appendChild(v); });
     const setStatus = (t, cls = "") => { const s = $("#cStatus", el); s.textContent = t; s.className = "foot-note " + cls; };
     const prev = () => {
@@ -942,7 +896,7 @@ function openCardSheet(id){
       if (!name) { $("#cName", el).focus(); setStatus("Dê um nome ao cartão.", "warn"); return; }
       if (!draft.code) { $("#cCode", el).focus(); setStatus("Falta o código. Tire uma foto ou digite os números.", "warn"); return; }
       const cid = id || newId("c");
-      queueWrite("cards", cid, { name, code: draft.code, format: draft.format, display: draft.display, photo: draft.photo, color: draft.color, logo: draft.logo, sort: c?.sort ?? (S.cards.size + 1) }, !c);
+      queueWrite("cards", cid, { name, code: draft.code, format: draft.format, display: draft.display, photo: draft.photo, color: draft.color, sort: c?.sort ?? (S.cards.size + 1) }, !c);
       autoColors.delete(cid);
       closeSheet(); toast(c ? "Cartão atualizado" : "Cartão salvo");
     });
@@ -1079,7 +1033,7 @@ $("#bell").addEventListener("click", openNotifySheet);
 
 /* ---------- new version banner ---------- */
 // Bump APP_VERSION here and in version.json on every release.
-const APP_VERSION = "2026-10-23.1";
+const APP_VERSION = "2026-10-23.2";
 let updateShown = false;
 async function checkVersion(){
   if (updateShown || document.hidden || location.protocol === "file:") return;
