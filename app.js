@@ -68,8 +68,15 @@ async function flush(){
       } catch(e){ r = { error: { message: String(e) } }; }
       if (r.error){
         if (isNetErr(r.error)) { op.sending = false; break; }
+        // A field the database doesn't have yet (e.g. a setup SQL not run): drop just that
+        // field and send the rest, instead of losing the whole item or card.
+        const col = /could not find the '([^']+)' column/i.exec(r.error.message || "");
+        if (col && op.patch && col[1] in op.patch && Object.keys(op.patch).length > 1) {
+          console.warn("Lista: column missing, retrying without it:", col[1]);
+          delete op.patch[col[1]]; op.sending = false; persist(); continue;
+        }
         console.warn("Lista: write rejected", r.error);
-        toast("Uma alteração não foi salva no servidor.");
+        toast(op.table === "cards" ? "O cartão não foi salvo no servidor. Tente de novo." : "Uma alteração não foi salva no servidor.");
       }
       S.outbox.shift(); persist();
     }
@@ -924,7 +931,7 @@ function openCardSheet(id){
       if (!name) { $("#cName", el).focus(); setStatus("Dê um nome ao cartão.", "warn"); return; }
       if (!draft.code) { $("#cCode", el).focus(); setStatus("Falta o código. Tire uma foto ou digite os números.", "warn"); return; }
       const cid = id || newId("c");
-      queueWrite("cards", cid, { name, code: draft.code, format: draft.format, display: draft.display, photo: draft.photo, color: draft.color, sort: c?.sort ?? (S.cards.size + 1) }, !c);
+      queueWrite("cards", cid, { name, code: draft.code, format: draft.format, display: draft.display, photo: draft.photo, ...(draft.color || c?.color ? { color: draft.color } : {}), sort: c?.sort ?? (S.cards.size + 1) }, !c);
       autoColors.delete(cid); saveAutoColors();
       closeSheet(); toast(c ? "Cartão atualizado" : "Cartão salvo");
     });
@@ -1061,7 +1068,7 @@ $("#bell").addEventListener("click", openNotifySheet);
 
 /* ---------- new version banner ---------- */
 // Bump APP_VERSION here and in version.json on every release.
-const APP_VERSION = "2026-10-23.3";
+const APP_VERSION = "2026-10-28.1";
 let updateShown = false;
 async function checkVersion(){
   if (updateShown || document.hidden || location.protocol === "file:") return;
