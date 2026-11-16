@@ -15,7 +15,7 @@
 :root{
   color-scheme: light;
   --bg:#FFFFFF; --ink:#000000; --ink2:#3C3C43; --muted:#8A8A8E; --sep:#E3E3E8; --fill:#EFEFF0;
-  --blue:#007AFF; --green:#34C759; --red:#FF3B30; --orange:#FF9500;
+  --blue:#007AFF; --accent:#FF9500;
   --font:-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --display:-apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
@@ -27,33 +27,38 @@ button{cursor:pointer;background:none;border:0;padding:0}
 [hidden]{display:none!important}
 .app{max-width:680px;margin:0 auto;padding-top:env(safe-area-inset-top,0px);padding-left:max(20px,env(safe-area-inset-left,0px));padding-right:max(20px,env(safe-area-inset-right,0px));padding-bottom:calc(60px + env(safe-area-inset-bottom,0px))}
 header{padding-block:18px 4px;display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
-h1{font-family:var(--display);font-size:34px;font-weight:700;letter-spacing:-.02em;color:var(--blue);margin:0;line-height:1.1}
+h1{font-family:var(--display);font-size:34px;font-weight:700;letter-spacing:-.02em;color:var(--accent);margin:0;line-height:1.1}
 .back{font-size:15px;color:var(--blue);text-decoration:none;padding-bottom:4px}
 .sub{font-size:13px;color:var(--muted);margin:2px 0 12px}
 .sync{font-size:13px;color:var(--blue);min-height:16px}
 
-.filters{display:flex;gap:8px;overflow-x:auto;padding:4px 0 10px;scrollbar-width:none;position:sticky;top:0;background:var(--bg);z-index:2}
-.filters::-webkit-scrollbar{display:none}
-.chip{flex:none;height:32px;padding:0 12px;border-radius:16px;background:var(--fill);font-size:15px;display:flex;align-items:center;gap:6px;white-space:nowrap}
-.chip b{font-weight:600}
-.chip.on{background:var(--ink);color:#FFF}
-.dot{width:8px;height:8px;border-radius:50%;display:inline-block}
-
+.tabs{display:flex;background:var(--fill);border-radius:9px;padding:2px;margin:4px 0 6px;position:sticky;top:0;z-index:2}
+.tabs button{flex:1;height:32px;border-radius:7px;font-size:15px;color:var(--ink2)}
+.tabs button.on{background:var(--bg);color:var(--ink);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.tabs b{font-weight:600;color:var(--muted);margin-left:4px}
 section{border-bottom:.5px solid var(--sep);padding-block:6px}
 section h2{font-size:20px;font-weight:700;margin:12px 0 2px;display:flex;justify-content:space-between;align-items:baseline}
 section h2 small{font-size:13px;font-weight:400;color:var(--muted)}
-.row{padding:10px 0;border-top:.5px solid var(--sep)}
+.row{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-top:.5px solid var(--sep)}
 section .row:first-of-type{border-top:0}
+.body{flex:1;min-width:0}
 .top{display:flex;gap:10px;align-items:baseline}
 .name{flex:1;min-width:0;text-align:left;line-height:1.3}
 .qty{font-size:15px;color:var(--muted);font-variant-numeric:tabular-nums}
 .fr{font-size:13px;color:var(--muted);margin-top:1px}
 .obs{font-size:14px;color:var(--ink2);margin-top:3px}
-.seg{display:flex;gap:6px;margin-top:8px}
-.seg button{flex:1;height:32px;border-radius:8px;background:var(--fill);font-size:14px;color:var(--ink2)}
-.seg button.on[data-s="tenho"]{background:var(--green);color:#FFF;font-weight:600}
-.seg button.on[data-s="repor"]{background:var(--red);color:#FFF;font-weight:600}
-.seg button.on[data-s="danificado"]{background:var(--orange);color:#FFF;font-weight:600}
+.chk{flex:none;width:24px;height:24px;margin-top:1px;border-radius:50%;border:1.5px solid #C7C7CC;display:grid;place-items:center;position:relative;transition:background .15s,border-color .15s}
+.chk svg{width:13px;height:13px;color:#FFF;opacity:0}
+.chk.on{background:var(--accent);border-color:var(--accent)}
+.chk.on svg{opacity:1}
+.chk svg path{stroke-dasharray:24;stroke-dashoffset:0}
+.chk.pop{animation:chkPop .38s cubic-bezier(.3,1.6,.5,1)}
+.chk.pop svg path{animation:chkDraw .3s .06s ease-out both}
+@keyframes chkPop{0%{transform:scale(1)}35%{transform:scale(.82)}70%{transform:scale(1.18)}100%{transform:scale(1)}}
+@keyframes chkDraw{from{stroke-dashoffset:24}to{stroke-dashoffset:0}}
+.row.checking .name{color:var(--muted);transition:color .2s}
+.row.leaving{overflow:hidden;transition:height .28s cubic-bezier(.4,0,.2,1),opacity .22s ease,padding .28s;opacity:0;padding-block:0}
+.done .name{color:var(--muted)}
 textarea{width:100%;margin-top:8px;border:0;border-radius:10px;background:var(--fill);padding:8px 10px;font-size:15px;resize:vertical;min-height:60px;outline:none}
 .empty{color:var(--muted);text-align:center;padding:40px 0}
 </style>
@@ -64,9 +69,9 @@ textarea{width:100%;margin-top:8px;border:0;border-radius:10px;background:var(--
     <h1>Mudança</h1>
     <a class="back" href="../">← Lista</a>
   </header>
-  <div class="sub">Inventário Baron de Castro 57 · toque no nome pra anotar</div>
+  <div class="sub">Inventário Baron de Castro 57 · marque o que já tem</div>
   <div class="sync" id="sync"></div>
-  <nav class="filters" id="filters"></nav>
+  <nav class="tabs" id="tabs"></nav>
   <main id="main"></main>
 </div>
 
@@ -136,7 +141,8 @@ const SEED = [
 ["Armário do hall","Aspirador Philips (sem saco)",1,"","Aspirateur sans sac"]
 ].map(([room, item, qty, obs, fr], i) => ({ id: "mud:" + String(i + 1).padStart(2, "0"), value: { n: i + 1, room, item, qty, obs, fr, status: null } }));
 
-const STATUS = [["tenho","Tenho","var(--green)"],["repor","Repor","var(--red)"],["danificado","Danificado","var(--orange)"]];
+const I_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+const has = r => r.value.status === "tenho";
 const CFG = window.LISTA_CONFIG || {};
 const sb = window.supabase && CFG.supabaseUrl ? window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey, { auth: { persistSession: false } }) : null;
 const KEY = "lista.mudanca";
@@ -145,7 +151,7 @@ try { (JSON.parse(localStorage.getItem(KEY)) || []).forEach(r => items.set(r.id,
 if (!items.size) SEED.forEach(r => items.set(r.id, structuredClone(r)));
 let pending = new Map();   // id -> value still to save
 try { (JSON.parse(localStorage.getItem(KEY + ".pending")) || []).forEach(([k, v]) => pending.set(k, v)); } catch(e){}
-let filter = "all", openNote = null;
+let tab = "falta", openNote = null;
 
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
 function persist(){
@@ -158,30 +164,38 @@ function setSync(){
 
 function render(){
   const all = [...items.values()].sort((a, b) => a.value.n - b.value.n);
-  const count = s => all.filter(r => (r.value.status || null) === s).length;
-  const chips = [["all","Tudo",all.length,null],["none","Conferir",count(null),"var(--muted)"], ...STATUS.map(([k, l, c]) => [k, l, count(k), c])];
-  document.getElementById("filters").innerHTML = chips.map(([k, l, n, c]) =>
-    `<button class="chip${filter === k ? " on" : ""}" data-f="${k}">${c ? `<span class="dot" style="background:${c}"></span>` : ""}${l} <b>${n}</b></button>`).join("");
-
-  const shown = all.filter(r => filter === "all" || (filter === "none" ? !r.value.status : r.value.status === filter));
-  if (!shown.length){ document.getElementById("main").innerHTML = `<div class="empty">Nada aqui.</div>`; return; }
+  const nHas = all.filter(has).length;
+  document.getElementById("tabs").innerHTML =
+    `<button data-t="falta" class="${tab === "falta" ? "on" : ""}">Falta<b>${all.length - nHas}</b></button>` +
+    `<button data-t="tenho" class="${tab === "tenho" ? "on" : ""}">Tenho<b>${nHas}</b></button>`;
+  const shown = all.filter(r => (tab === "tenho") === has(r));
+  if (!shown.length){ document.getElementById("main").innerHTML = `<div class="empty">${tab === "falta" ? "Tudo certo, não falta nada 🎉" : "Nada marcado ainda."}</div>`; return; }
   const rooms = [...new Set(shown.map(r => r.value.room))];
   document.getElementById("main").innerHTML = rooms.map(room => {
     const rs = shown.filter(r => r.value.room === room);
-    const done = all.filter(r => r.value.room === room && r.value.status).length;
-    const total = all.filter(r => r.value.room === room).length;
-    return `<section><h2>${esc(room)} <small>${done}/${total}</small></h2>` + rs.map(r => {
-      const v = r.value;
+    return `<section${tab === "tenho" ? ' class="done"' : ""}><h2>${esc(room)} <small>${rs.length}</small></h2>` + rs.map(r => {
+      const v = r.value, on = has(r);
       return `<div class="row" data-id="${r.id}">
-        <div class="top"><button class="name" data-note>${esc(v.item)}</button><span class="qty">${v.qty != null ? "×" + v.qty : ""}</span></div>
-        <div class="fr">${esc(v.fr)}</div>
-        ${v.obs && openNote !== r.id ? `<div class="obs">${esc(v.obs)}</div>` : ""}
-        ${openNote === r.id ? `<textarea placeholder="Anotação (ex.: falta 1, quebrou…)">${esc(v.obs)}</textarea>` : ""}
-        <div class="seg">${STATUS.map(([k, l]) => `<button data-s="${k}" class="${v.status === k ? "on" : ""}">${l}</button>`).join("")}</div>
+        <button class="chk${on ? " on" : ""}" data-chk aria-label="${on ? "Desmarcar" : "Marcar"} ${esc(v.item)}">${I_CHECK}</button>
+        <div class="body">
+          <div class="top"><button class="name" data-note>${esc(v.item)}</button><span class="qty">${v.qty != null ? "×" + v.qty : ""}</span></div>
+          <div class="fr">${esc(v.fr)}</div>
+          ${v.obs && openNote !== r.id ? `<div class="obs">${esc(v.obs)}</div>` : ""}
+          ${openNote === r.id ? `<textarea placeholder="Anotação (ex.: falta 1, quebrou…)">${esc(v.obs)}</textarea>` : ""}
+        </div>
       </div>`;
     }).join("") + `</section>`;
   }).join("");
   if (openNote){ const t = document.querySelector(`[data-id="${openNote}"] textarea`); if (t){ t.focus(); t.setSelectionRange(t.value.length, t.value.length); } }
+}
+function fold(row, done){
+  if (row.dataset.busy) return; row.dataset.busy = "1";
+  try { navigator.vibrate && navigator.vibrate(10); } catch(e){}
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return done();
+  const c = row.querySelector(".chk");
+  c.classList.toggle("on"); c.classList.add("pop"); row.classList.add("checking");
+  setTimeout(() => { row.style.height = row.offsetHeight + "px"; row.offsetHeight; row.classList.add("leaving"); row.style.height = "0px"; }, 380);
+  setTimeout(done, 680);
 }
 
 function change(id, patch){
@@ -216,12 +230,11 @@ async function load(){
 }
 
 document.addEventListener("click", e => {
-  const f = e.target.closest("[data-f]");
-  if (f){ filter = f.dataset.f; openNote = null; render(); return; }
+  const t = e.target.closest("[data-t]");
+  if (t){ tab = t.dataset.t; openNote = null; render(); scrollTo(0, 0); return; }
   const row = e.target.closest(".row"); if (!row) return;
   const id = row.dataset.id;
-  const s = e.target.closest("[data-s]");
-  if (s){ const v = items.get(id).value; change(id, { status: v.status === s.dataset.s ? null : s.dataset.s }); return; }
+  if (e.target.closest("[data-chk]")){ const next = has(items.get(id)) ? null : "tenho"; fold(row, () => change(id, { status: next })); return; }
   if (e.target.closest("[data-note]")){ openNote = openNote === id ? null : id; render(); }
 });
 document.addEventListener("focusout", e => {
