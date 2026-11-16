@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Mudança</title>
+<meta name="theme-color" content="#FFFFFF">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Mudança">
+<link rel="apple-touch-icon" href="../icons/apple-touch-icon.png?v=2">
+<link rel="icon" type="image/svg+xml" href="../icons/favicon.svg?v=3">
+<style>
+/* Same look as Lista: white ground, large tinted title, hairline rows. */
+:root{
+  color-scheme: light;
+  --bg:#FFFFFF; --ink:#000000; --ink2:#3C3C43; --muted:#8A8A8E; --sep:#E3E3E8; --fill:#EFEFF0;
+  --blue:#007AFF; --green:#34C759; --red:#FF3B30; --orange:#FF9500;
+  --font:-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --display:-apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:17px;-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:0;padding:0}
+[hidden]{display:none!important}
+.app{max-width:680px;margin:0 auto;padding-top:env(safe-area-inset-top,0px);padding-left:max(20px,env(safe-area-inset-left,0px));padding-right:max(20px,env(safe-area-inset-right,0px));padding-bottom:calc(60px + env(safe-area-inset-bottom,0px))}
+header{padding-block:18px 4px;display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
+h1{font-family:var(--display);font-size:34px;font-weight:700;letter-spacing:-.02em;color:var(--blue);margin:0;line-height:1.1}
+.back{font-size:15px;color:var(--blue);text-decoration:none;padding-bottom:4px}
+.sub{font-size:13px;color:var(--muted);margin:2px 0 12px}
+.sync{font-size:13px;color:var(--blue);min-height:16px}
+
+.filters{display:flex;gap:8px;overflow-x:auto;padding:4px 0 10px;scrollbar-width:none;position:sticky;top:0;background:var(--bg);z-index:2}
+.filters::-webkit-scrollbar{display:none}
+.chip{flex:none;height:32px;padding:0 12px;border-radius:16px;background:var(--fill);font-size:15px;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.chip b{font-weight:600}
+.chip.on{background:var(--ink);color:#FFF}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+
+section{border-bottom:.5px solid var(--sep);padding-block:6px}
+section h2{font-size:20px;font-weight:700;margin:12px 0 2px;display:flex;justify-content:space-between;align-items:baseline}
+section h2 small{font-size:13px;font-weight:400;color:var(--muted)}
+.row{padding:10px 0;border-top:.5px solid var(--sep)}
+section .row:first-of-type{border-top:0}
+.top{display:flex;gap:10px;align-items:baseline}
+.name{flex:1;min-width:0;text-align:left;line-height:1.3}
+.qty{font-size:15px;color:var(--muted);font-variant-numeric:tabular-nums}
+.fr{font-size:13px;color:var(--muted);margin-top:1px}
+.obs{font-size:14px;color:var(--ink2);margin-top:3px}
+.seg{display:flex;gap:6px;margin-top:8px}
+.seg button{flex:1;height:32px;border-radius:8px;background:var(--fill);font-size:14px;color:var(--ink2)}
+.seg button.on[data-s="tenho"]{background:var(--green);color:#FFF;font-weight:600}
+.seg button.on[data-s="repor"]{background:var(--red);color:#FFF;font-weight:600}
+.seg button.on[data-s="danificado"]{background:var(--orange);color:#FFF;font-weight:600}
+textarea{width:100%;margin-top:8px;border:0;border-radius:10px;background:var(--fill);padding:8px 10px;font-size:15px;resize:vertical;min-height:60px;outline:none}
+.empty{color:var(--muted);text-align:center;padding:40px 0}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Mudança</h1>
+    <a class="back" href="../">← Lista</a>
+  </header>
+  <div class="sub">Inventário Baron de Castro 57 · toque no nome pra anotar</div>
+  <div class="sync" id="sync"></div>
+  <nav class="filters" id="filters"></nav>
+  <main id="main"></main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="../config.js"></script>
+<script>
+// Move-out checklist. Each item is one row of the existing "settings" table (id "mud:NN"),
+// so no new Supabase table is needed and two phones editing different items never overwrite each other.
+const SEED = [
+["Sala","Mesa quadrada de carvalho (pés brancos)",1,"","Table carrée en chêne"],
+["Sala","Cadeiras de fazenda",4,"Anotado \"+/–\" ao lado – conferir","Chaises de ferme assorties"],
+["Sala","Aparador estilo Luís XVI",1,"Anotado: não está fixado","Console Louis XVI"],
+["Sala","Sofá-cama de canto (gaveta + baú)",1,"Já tinha manchas na entrada","Canapé d'angle"],
+["Sala","Poltrona cinza",1,"","Fauteuil gris 1 personne"],
+["Sala","Cômoda da sala (2 portas, 6 gavetas)",1,"","Meuble à grains"],
+["Sala","Mesa de centro com tampo de vidro",1,"","Table basse à croisillons"],
+["Sala","TV Sony KDL40WE660",1,"","Télévision SONY"],
+["Sala","Tapete cinza felpudo",1,"","Tapis gris à longs poils"],
+["Sala","Abajur (em cima da cômoda)",1,"","Lampe sur pied, abat-jour gris"],
+["Sala","Luminária de chão (braço articulado)",1,"","Lampe avec bras articulé"],
+["Sala","Extensão / régua de tomadas",2,"Tinha um \"?\" na lista – conferir","Multi-prise"],
+["Sala","Decodificador + modem Telenet",1,"","Décodeur + appareil Telenet"],
+["Cozinha","Panelas IKEA",3,"","Casseroles"],
+["Cozinha","Frigideira IKEA",1,"","Poêle"],
+["Cozinha","Copos IKEA",12,"","Verres à eau"],
+["Cozinha","Taças de vinho IKEA",6,"","Verres à vin"],
+["Cozinha","Facas (talheres)",5,"","Couteaux"],
+["Cozinha","Garfos",5,"","Fourchettes"],
+["Cozinha","Colheres",6,"","Cuillères"],
+["Cozinha","Colheres de café",6,"","Cuillères à café"],
+["Cozinha","Garfos de sobremesa",6,"","Fourchettes à dessert"],
+["Cozinha","Peneira / escorredor branco IKEA",1,"","Passoire en plastique"],
+["Cozinha","Travessas pyrex IKEA",2,"","Plats pyrex"],
+["Cozinha","Tábua de corte branca IKEA",1,"","Planche à découper"],
+["Cozinha","Facas de cozinha IKEA",3,"","Set de 3 couteaux"],
+["Cozinha","Tesoura IKEA",1,"","Ciseaux"],
+["Cozinha","Pegador de carne",1,"","Pince à viande"],
+["Cozinha","Batedor (fouet)",1,"","Fouet plat"],
+["Cozinha","Colher de espaguete",1,"","Cuillère à spaghetti"],
+["Cozinha","Concha",1,"","Louche"],
+["Cozinha","Espátula",1,"","Spatule"],
+["Cozinha","Colheres de pau",2,"","Cuillères en bois"],
+["Cozinha","Pão-duro de plástico",1,"","Lèche-plat"],
+["Cozinha","Pratos grandes",6,"","Grandes assiettes"],
+["Cozinha","Pratos pequenos",6,"","Petites assiettes"],
+["Cozinha","Tigelas",6,"","Bols"],
+["Cozinha","Vaso de plástico (flores)",1,"","Vase en plastique"],
+["Cozinha","Jogo americano vermelho",6,"Anotado: 1 pra lavar","Sets de table rouges"],
+["Cozinha","Guardanapos de tecido",4,"Anotado \"3\" em cima do 4","Serviettes tissu"],
+["Cozinha","Pá de lixo Vileda",1,"","Ramassette"],
+["Cozinha","Escova Vileda",1,"","Brosse"],
+["Cozinha","Lixeira separada",1,"","Poubelle séparée"],
+["Cozinha","Torradeira SEB",1,"Proprietário não repõe se quebrar","Grille-pain"],
+["Cozinha","Chaleira elétrica Tefal",1,"Proprietário não repõe se quebrar","Bouilloire électrique"],
+["Cozinha","Espremedor de fruta Braun",1,"Proprietário não repõe se quebrar","Presse fruit"],
+["Quarto","Cama 140×200 (box, colchão, capa IKEA)",1,"","Lit avec sommier, matelas, housse"],
+["Quarto","Abajur de cabeceira",1,"","Lampe de chevet"],
+["Quarto","Armário IKEA 150 cm",1,"","Armoire 150cm"],
+["Quarto","Cabides de madeira",null,"Lista diz \"alguns\"","Quelques cintres en bois"],
+["Quarto","Criado-mudo (mesinha de madeira)",1,"","Petite table carrée"],
+["Banheiro","Gabinete da pia (2 gavetas)",1,"","Meuble lavabo"],
+["Banheiro","Armário com espelhos",1,"","Armoire de toilette avec miroirs"],
+["Banheiro","Máquina de lavar e secar Brandt",1,"","Machine à laver avec séchoir"],
+["Armário do hall","Escada",1,"","Échelle"],
+["Armário do hall","Tábua de passar",1,"","Planche à repasser"],
+["Armário do hall","Ferro de passar",1,"","Fer à repasser"],
+["Armário do hall","Aspirador Philips (sem saco)",1,"","Aspirateur sans sac"]
+].map(([room, item, qty, obs, fr], i) => ({ id: "mud:" + String(i + 1).padStart(2, "0"), value: { n: i + 1, room, item, qty, obs, fr, status: null } }));
+
+const STATUS = [["tenho","Tenho","var(--green)"],["repor","Repor","var(--red)"],["danificado","Danificado","var(--orange)"]];
+const CFG = window.LISTA_CONFIG || {};
+const sb = window.supabase && CFG.supabaseUrl ? window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey, { auth: { persistSession: false } }) : null;
+const KEY = "lista.mudanca";
+let items = new Map();
+try { (JSON.parse(localStorage.getItem(KEY)) || []).forEach(r => items.set(r.id, r)); } catch(e){}
+if (!items.size) SEED.forEach(r => items.set(r.id, structuredClone(r)));
+let pending = new Map();   // id -> value still to save
+try { (JSON.parse(localStorage.getItem(KEY + ".pending")) || []).forEach(([k, v]) => pending.set(k, v)); } catch(e){}
+let filter = "all", openNote = null;
+
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+function persist(){
+  try { localStorage.setItem(KEY, JSON.stringify([...items.values()])); localStorage.setItem(KEY + ".pending", JSON.stringify([...pending])); } catch(e){}
+}
+function setSync(){
+  const el = document.getElementById("sync");
+  el.textContent = !sb ? "Não configurado" : !navigator.onLine ? (pending.size ? "Sem internet · salvo no celular" : "Sem internet") : pending.size ? "Salvando…" : "";
+}
+
+function render(){
+  const all = [...items.values()].sort((a, b) => a.value.n - b.value.n);
+  const count = s => all.filter(r => (r.value.status || null) === s).length;
+  const chips = [["all","Tudo",all.length,null],["none","Conferir",count(null),"var(--muted)"], ...STATUS.map(([k, l, c]) => [k, l, count(k), c])];
+  document.getElementById("filters").innerHTML = chips.map(([k, l, n, c]) =>
+    `<button class="chip${filter === k ? " on" : ""}" data-f="${k}">${c ? `<span class="dot" style="background:${c}"></span>` : ""}${l} <b>${n}</b></button>`).join("");
+
+  const shown = all.filter(r => filter === "all" || (filter === "none" ? !r.value.status : r.value.status === filter));
+  if (!shown.length){ document.getElementById("main").innerHTML = `<div class="empty">Nada aqui.</div>`; return; }
+  const rooms = [...new Set(shown.map(r => r.value.room))];
+  document.getElementById("main").innerHTML = rooms.map(room => {
+    const rs = shown.filter(r => r.value.room === room);
+    const done = all.filter(r => r.value.room === room && r.value.status).length;
+    const total = all.filter(r => r.value.room === room).length;
+    return `<section><h2>${esc(room)} <small>${done}/${total}</small></h2>` + rs.map(r => {
+      const v = r.value;
+      return `<div class="row" data-id="${r.id}">
+        <div class="top"><button class="name" data-note>${esc(v.item)}</button><span class="qty">${v.qty != null ? "×" + v.qty : ""}</span></div>
+        <div class="fr">${esc(v.fr)}</div>
+        ${v.obs && openNote !== r.id ? `<div class="obs">${esc(v.obs)}</div>` : ""}
+        ${openNote === r.id ? `<textarea placeholder="Anotação (ex.: falta 1, quebrou…)">${esc(v.obs)}</textarea>` : ""}
+        <div class="seg">${STATUS.map(([k, l]) => `<button data-s="${k}" class="${v.status === k ? "on" : ""}">${l}</button>`).join("")}</div>
+      </div>`;
+    }).join("") + `</section>`;
+  }).join("");
+  if (openNote){ const t = document.querySelector(`[data-id="${openNote}"] textarea`); if (t){ t.focus(); t.setSelectionRange(t.value.length, t.value.length); } }
+}
+
+function change(id, patch){
+  const r = items.get(id); if (!r) return;
+  r.value = { ...r.value, ...patch };
+  pending.set(id, r.value);
+  persist(); render(); flush();
+}
+let flushing = false;
+async function flush(){
+  setSync();
+  if (!sb || flushing || !pending.size || !navigator.onLine) return;
+  flushing = true;
+  const batch = [...pending].map(([id, value]) => ({ id, value }));
+  const { error } = await sb.from("settings").upsert(batch);
+  if (!error) batch.forEach(b => { if (pending.get(b.id) === b.value) pending.delete(b.id); });
+  flushing = false; persist(); setSync();
+  if (!error && pending.size) flush();
+}
+
+async function load(){
+  if (!sb) return setSync();
+  const { data, error } = await sb.from("settings").select("*").like("id", "mud:%");
+  if (error) return setSync();
+  if (!data.length){
+    // First open anywhere: put the inventory in the database.
+    await sb.from("settings").upsert(SEED, { onConflict: "id", ignoreDuplicates: true });
+    return load();
+  }
+  data.forEach(r => { if (!pending.has(r.id)) items.set(r.id, r); });
+  persist(); render(); flush();
+}
+
+document.addEventListener("click", e => {
+  const f = e.target.closest("[data-f]");
+  if (f){ filter = f.dataset.f; openNote = null; render(); return; }
+  const row = e.target.closest(".row"); if (!row) return;
+  const id = row.dataset.id;
+  const s = e.target.closest("[data-s]");
+  if (s){ const v = items.get(id).value; change(id, { status: v.status === s.dataset.s ? null : s.dataset.s }); return; }
+  if (e.target.closest("[data-note]")){ openNote = openNote === id ? null : id; render(); }
+});
+document.addEventListener("focusout", e => {
+  if (e.target.tagName !== "TEXTAREA") return;
+  const id = e.target.closest(".row").dataset.id, val = e.target.value.trim();
+  openNote = null;
+  if (val !== (items.get(id).value.obs || "")) change(id, { obs: val }); else render();
+});
+
+if (sb){
+  sb.channel("mudanca").on("postgres_changes", { event: "*", schema: "public", table: "settings" }, p => {
+    const r = p.new; if (!r || !String(r.id).startsWith("mud:") || pending.has(r.id) || openNote === r.id) return;
+    items.set(r.id, r); persist(); render();
+  }).subscribe(st => { if (st === "SUBSCRIBED") load(); });
+}
+window.addEventListener("online", () => { flush(); load(); });
+window.addEventListener("offline", setSync);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible"){ flush(); load(); } });
+render(); setSync(); load();
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("../sw.js").catch(() => {});
+</script>
+</body>
+</html>
